@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ platform_title }}{% if title %} · {{ title }}{% endif %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="container header-inner">
+        <a href="{{ url_for('feed') }}" class="brand">
+          <span class="logo-dot"></span>
+          <span>Sosyal Kütüphane</span>
+        </a>
+        <nav class="nav-links">
+          <a href="{{ url_for('feed') }}">Akış</a>
+          <a href="{{ url_for('explore') }}">Keşfet</a>
+          <a href="{{ url_for('profile', username='elifkara') }}">Profil</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="ghost" href="{{ url_for('login') }}">Giriş</a>
+          <a class="primary" href="{{ url_for('register') }}">Kayıt Ol</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="app-footer">
+      <div class="container">
+        <p>© {{ 2025 }} Sosyal Kütüphane · API Kaynakları: TMDb & Google Books</p>
+      </div>
+    </footer>
+  </body>
+</html>
+

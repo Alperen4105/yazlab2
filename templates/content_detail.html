@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not content %}
+  <section>
+    <h1>İçerik bulunamadı</h1>
+    <p>Aradığınız kayıt kaldırılmış olabilir.</p>
+    <a href="{{ url_for('explore') }}">Keşfet sayfasına dön</a>
+  </section>
+{% else %}
+  <section class="content-hero">
+    <img src="{{ content.poster }}" alt="{{ content.title }}" />
+    <div>
+      <p class="eyebrow">{{ content.kind | upper }}</p>
+      <h1>{{ content.title }}</h1>
+      {% if content.year %}
+        <p class="muted">{{ content.year }}</p>
+      {% endif %}
+      <div class="actions">
+        <button class="primary">Puan Ver</button>
+        <button>Listeme Ekle</button>
+        <button class="ghost">Özel Listeye Ekle</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="comments">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Yorumlar</p>
+        <h2>Topluluk geri bildirimleri</h2>
+      </div>
+      <button class="ghost">Yeni Yorum</button>
+    </div>
+    <ul>
+      {% for item in comments %}
+        <li>
+          <img src="{{ item.avatar }}" alt="{{ item.user }}" />
+          <div>
+            <strong>{{ item.user }}</strong>
+            <span class="timestamp">{{ item.timestamp }}</span>
+            <p>{{ item.text }}</p>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
+{% endblock %}
+

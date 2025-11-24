@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "components/activity_card.html" import activity_card %}
+{% block content %}
+<div class="layout-grid">
+  <section>
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Sosyal Akış</p>
+        <h1>Topluluğundaki en yeni aktiviteler</h1>
+      </div>
+      <button class="ghost">Yeni Gönderi</button>
+    </div>
+    <div class="activity-list">
+      {% for activity in activities %}
+        {{ activity_card(activity) }}
+      {% else %}
+        <p class="muted">Henüz aktivite yok.</p>
+      {% endfor %}
+    </div>
+    {% if has_more %}
+      <a class="load-more" href="{{ url_for('feed', page=current_page + 1) }}">Daha fazla yükle</a>
+    {% endif %}
+  </section>
+
+  <aside>
+    <div class="panel">
+      <p class="eyebrow">Öne Çıkan Listeler</p>
+      <ul class="list-items">
+        {% for item in featured_lists %}
+          <li>
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.items }} içerik · {{ item.owner }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="panel">
+      <p class="eyebrow">Popüler Kullanıcılar</p>
+      <ul class="list-items">
+        {% for user in featured_users %}
+          <li><a href="{{ url_for('profile', username=user.username) }}">{{ user.name }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </aside>
+</div>
+{% endblock %}
+

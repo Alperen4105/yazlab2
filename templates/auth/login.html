@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth-card">
+  <h1>Giriş Yap</h1>
+  <p>Topluluğunuza katılmak için hesabınıza giriş yapın.</p>
+  {% if error %}
+    <div class="alert error">{{ error }}</div>
+  {% endif %}
+  <form method="post">
+    <label>E-posta
+      <input type="email" name="email" placeholder="ornek@posta.com" required />
+    </label>
+    <label>Şifre
+      <input type="password" name="password" placeholder="••••••••" required />
+    </label>
+    <div class="form-actions">
+      <a href="{{ url_for('forgot_password') }}">Şifremi Unuttum</a>
+      <button type="submit">Giriş Yap</button>
+    </div>
+  </form>
+  <p class="muted">Henüz üye değil misiniz? <a href="{{ url_for('register') }}">Hemen kayıt olun.</a></p>
+</section>
+{% endblock %}
+

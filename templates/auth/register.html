@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth-card">
+  <h1>Yeni Hesap Oluştur</h1>
+  <p>Film ve kitap deneyimlerini paylaşmaya başla.</p>
+  {% if error %}
+    <div class="alert error">{{ error }}</div>
+  {% endif %}
+  <form method="post">
+    <label>Kullanıcı Adı
+      <input type="text" name="username" placeholder="kullaniciadi" required />
+    </label>
+    <label>E-posta
+      <input type="email" name="email" placeholder="ornek@posta.com" required />
+    </label>
+    <label>Şifre
+      <input type="password" name="password" required />
+    </label>
+    <label>Şifre Tekrarı
+      <input type="password" name="confirm_password" required />
+    </label>
+    <button type="submit">Kayıt Ol</button>
+  </form>
+  <p class="muted">Zaten hesabınız var mı? <a href="{{ url_for('login') }}">Giriş yapın.</a></p>
+</section>
+{% endblock %}
+

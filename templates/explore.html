@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="explore-hero">
+  <div>
+    <p class="eyebrow">Keşfet</p>
+    <h1>Film ve kitap arşivini genişlet</h1>
+    <p>Vitrin modülleri TMDb ve Google Books API'lerinden gelecek gerçek veriler için hazırlandı.</p>
+  </div>
+  <form class="search-form" method="get">
+    <input type="search" name="q" value="{{ query }}" placeholder="Başlık ara..." />
+    <input type="number" min="0" max="10" step="0.5" name="min_score" value="{{ min_score }}" placeholder="Min. puan" />
+    <button type="submit">Filtrele</button>
+  </form>
+</section>
+
+{% for section, items in sections.items() %}
+  <section class="carousel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ section | replace("_", " ") | title }}</p>
+        <h2>{{ items|length }} içerik</h2>
+      </div>
+    </div>
+    <div class="card-row">
+      {% for item in items %}
+        <article class="content-card">
+          <img src="{{ item.poster }}" alt="{{ item.title }}" />
+          <div>
+            <p class="muted">{{ item.kind | upper }}</p>
+            <h3>{{ item.title }}</h3>
+            {% if item.score %}
+              <p class="score">{{ item.score }}/10 ortalama</p>
+            {% elif item.comments %}
+              <p class="score">{{ item.comments }} yorum</p>
+            {% endif %}
+            <a href="{{ url_for('content_detail', content_type=item.kind, content_id=item.id) }}">Detaylar</a>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% else %}
+  <p class="muted">Sonuç bulunamadı.</p>
+{% endfor %}
+{% endblock %}
+

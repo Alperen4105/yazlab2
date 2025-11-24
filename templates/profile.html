@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not profile %}
+  <section>
+    <h1>Profil bulunamadı</h1>
+    <p>Aradığınız kullanıcı mevcut değil.</p>
+  </section>
+{% else %}
+  <section class="profile-header">
+    <img src="{{ profile.avatar }}" alt="{{ profile.name }}" />
+    <div>
+      <p class="eyebrow">@{{ profile.username }}</p>
+      <h1>{{ profile.name }}</h1>
+      <p>{{ profile.bio }}</p>
+      <div class="meta">
+        <span>{{ profile.followers }} takipçi</span>
+        <span>{{ profile.following }} takip</span>
+      </div>
+      <div class="actions">
+        <button class="primary">Takip Et</button>
+        <button class="ghost">Mesaj Gönder</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="library-tabs">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Kütüphane</p>
+        <h2>Sezgisel sekmeli yapı</h2>
+      </div>
+    </div>
+    <div class="tab-grid">
+      {% for tab, items in library_tabs.items() %}
+        <article>
+          <h3>{{ tab | replace("_", " ") | title }}</h3>
+          <div class="mini-grid">
+            {% for item in items %}
+              <figure>
+                <img src="{{ item.poster }}" alt="{{ item.title }}" />
+                <figcaption>{{ item.title }}</figcaption>
+              </figure>
+            {% else %}
+              <p class="muted">Liste boş</p>
+            {% endfor %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section>
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Son Aktiviteler</p>
+        <h2>Topluluk hareketleri</h2>
+      </div>
+    </div>
+    <div class="activity-list">
+      {% for activity in activities %}
+        <article class="activity-card compact">
+          <strong>{{ activity.user.name }}</strong>
+          <p>{{ activity.timestamp }} · {{ activity.content.title }}</p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+{% endblock %}
+
