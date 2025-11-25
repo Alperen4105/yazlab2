@@ -1,85 +1,67 @@
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional, Tuple
 
-from flask import Flask, redirect, render_template, request, url_for
-
-from data.sample_data import (
-    FEED_ACTIVITIES,
-    FEATURED_LISTS,
-    FEATURED_USERS,
-    LIBRARY_TABS,
-    POPULAR_CONTENT,
-    USER_PROFILES,
+from flask import (
+    Flask,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
 )
+from dotenv import load_dotenv
+
+from backend import init_app
+from backend.api.client import call_api
+
+load_dotenv()
+
+app = Flask(__name__, instance_relative_config=True)
 
 
-app = Flask(__name__)
-
-
-@dataclass
-class ContentItem:
-    content_id: str
-    title: str
-    kind: str
-    poster: str
-    year: Optional[int] = None
-    score: Optional[float] = None
-
-
-def build_content_index() -> Dict[str, ContentItem]:
-    items: Dict[str, ContentItem] = {}
-
-    def _register(payload: Dict[str, Any]) -> None:
-        content_id = payload["id"]
-        items[content_id] = ContentItem(
-            content_id=content_id,
-            title=payload["title"],
-            kind=payload.get("kind", "film"),
-            poster=payload.get("poster", ""),
-            year=payload.get("year"),
-            score=payload.get("score"),
-        )
-
-    for activity in FEED_ACTIVITIES:
-        content = activity.get("content")
-        if content:
-            _register(content)
-
-    for section in POPULAR_CONTENT.values():
-        for item in section:
-            _register(item)
-
-    return items
-
-
-CONTENT_INDEX = build_content_index()
+def api_request(
+    method: str,
+    path: str,
+    *,
+    json: Optional[Dict[str, Any]] = None,
+    query_string: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None,
+) -> Tuple[Dict[str, Any], int]:
+    data, status = call_api(
+        method,
+        path,
+        json=json,
+        query_string=query_string,
+        headers=headers,
+    )
+    return data or {}, status
 
 
 @app.context_processor
 def inject_globals():
+    auth = session.get("auth", {})
     return {
-        "featured_users": FEATURED_USERS,
         "platform_title": "Sosyal Kütüphane",
+        "current_user": auth.get("user"),
     }
 
 
 @app.route("/")
 def feed():
     page = int(request.args.get("page", 1))
-    per_page = 10
-    start = (page - 1) * per_page
-    end = start + per_page
-    paginated = FEED_ACTIVITIES[start:end]
-    has_more = end < len(FEED_ACTIVITIES)
+    data, status = api_request("get", "/api/feed", query_string={"page": page})
+    if status != 200:
+        abort(status)
     return render_template(
         "feed.html",
-        activities=paginated,
-        featured_lists=FEATURED_LISTS,
+        activities=data.get("items", []),
+        featured_lists=data.get("featured_lists", []),
+        featured_users=data.get("featured_users", []),
         current_page=page,
-        has_more=has_more,
+        has_more=data.get("has_more", False),
     )
 
 
@@ -87,13 +69,22 @@ def feed():
 def login():
     error = None
     if request.method == "POST":
-        # Placeholder authentication logic for prototype
         email = request.form.get("email", "")
         password = request.form.get("password", "")
-        if not email or not password:
-            error = "Lütfen e-posta ve şifre alanlarını doldurun."
-        else:
+        payload, status = api_request(
+            "post",
+            "/api/auth/login",
+            json={"email": email, "password": password},
+        )
+        if status == 200:
+            session["auth"] = {
+                "access_token": payload.get("access_token"),
+                "refresh_token": payload.get("refresh_token"),
+                "user": payload.get("user"),
+            }
+            flash("Hoş geldiniz!", "success")
             return redirect(url_for("feed"))
+        error = payload.get("message", "Giriş yapılamadı.")
     return render_template("auth/login.html", error=error)
 
 
@@ -108,7 +99,25 @@ def register():
         elif request.form.get("password") != request.form.get("confirm_password"):
             error = "Şifreler uyuşmuyor."
         else:
-            return redirect(url_for("login"))
+            payload, status = api_request(
+                "post",
+                "/api/auth/register",
+                json={
+                    "username": request.form["username"],
+                    "email": request.form["email"],
+                    "password": request.form["password"],
+                    "display_name": request.form.get("username"),
+                },
+            )
+            if status == 201:
+                session["auth"] = {
+                    "access_token": payload.get("access_token"),
+                    "refresh_token": payload.get("refresh_token"),
+                    "user": payload.get("user"),
+                }
+                flash("Hesabınız oluşturuldu!", "success")
+                return redirect(url_for("feed"))
+            error = payload.get("message", "Kayıt sırasında bir hata oluştu.")
     return render_template("auth/register.html", error=error)
 
 
@@ -126,19 +135,16 @@ def forgot_password():
 def explore():
     query = request.args.get("q", "").strip()
     min_score = request.args.get("min_score")
-
-    filtered_sections = defaultdict(list)
-    for section_name, items in POPULAR_CONTENT.items():
-        for item in items:
-            if query and query.lower() not in item["title"].lower():
-                continue
-            if min_score and item.get("score") and item["score"] < float(min_score):
-                continue
-            filtered_sections[section_name].append(item)
-
+    payload, status = api_request(
+        "get",
+        "/api/explore",
+        query_string={"q": query, "min_score": min_score},
+    )
+    if status != 200:
+        abort(status)
     return render_template(
         "explore.html",
-        sections=filtered_sections or POPULAR_CONTENT,
+        sections=payload.get("sections", {}),
         query=query,
         min_score=min_score or "",
     )
@@ -146,45 +152,43 @@ def explore():
 
 @app.route("/content/<content_type>/<content_id>")
 def content_detail(content_type: str, content_id: str):
-    content = CONTENT_INDEX.get(content_id)
-    if not content:
+    payload, status = api_request("get", f"/api/content/{content_id}")
+    if status == 404:
         return render_template("content_detail.html", content=None), 404
-
-    sample_comments = [
-        {
-            "user": "elifkara",
-            "avatar": "https://i.pravatar.cc/60?img=47",
-            "text": "Görsel anlatımı nefes kesiciydi, özellikle final sekansı.",
-            "timestamp": "2 gün önce",
-        },
-        {
-            "user": "selinay",
-            "avatar": "https://i.pravatar.cc/60?img=15",
-            "text": "Karakter gelişimi biraz zayıf kalsa da dünya inşası harika.",
-            "timestamp": "5 gün önce",
-        },
-    ]
-
+    if status != 200:
+        abort(status)
     return render_template(
         "content_detail.html",
-        content=content,
-        comments=sample_comments,
+        content=payload.get("content"),
+        comments=payload.get("comments", []),
     )
 
 
 @app.route("/profile/<username>")
 def profile(username: str):
-    profile_data = USER_PROFILES.get(username)
-    if not profile_data:
+    payload, status = api_request("get", f"/api/profiles/{username}")
+    if status == 404:
         return render_template("profile.html", profile=None), 404
+    if status != 200:
+        abort(status)
 
     return render_template(
         "profile.html",
-        profile=profile_data,
-        library_tabs=LIBRARY_TABS,
-        featured_lists=FEATURED_LISTS,
-        activities=FEED_ACTIVITIES[:5],
+        profile=payload.get("profile"),
+        library_tabs=payload.get("library", {}),
+        featured_lists=payload.get("featured_lists", []),
+        activities=payload.get("recent_activities", []),
     )
+
+
+@app.route("/logout")
+def logout():
+    session.pop("auth", None)
+    flash("Görüşmek üzere!", "info")
+    return redirect(url_for("feed"))
+
+
+init_app(app)
 
 
 if __name__ == "__main__":
