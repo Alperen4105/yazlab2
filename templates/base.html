@@ -26,8 +26,15 @@
           <a href="{{ url_for('profile', username='elifkara') }}">Profil</a>
         </nav>
         <div class="nav-actions">
-          <a class="ghost" href="{{ url_for('login') }}">Giriş</a>
-          <a class="primary" href="{{ url_for('register') }}">Kayıt Ol</a>
+          {% if current_user %}
+            <a class="ghost" href="{{ url_for('profile', username=current_user.username) }}">
+              {{ current_user.display_name or current_user.username }}
+            </a>
+            <a class="primary" href="{{ url_for('logout') }}">Çıkış</a>
+          {% else %}
+            <a class="ghost" href="{{ url_for('login') }}">Giriş</a>
+            <a class="primary" href="{{ url_for('register') }}">Kayıt Ol</a>
+          {% endif %}
         </div>
       </div>
     </header>

@@ -152,6 +152,55 @@ def explore():
 
 @app.route("/content/<content_type>/<content_id>")
 def content_detail(content_type: str, content_id: str):
+    if request.method == "POST":
+        # handle new comment or rating from frontend form
+        auth = session.get("auth", {})
+        access = auth.get("access_token")
+        if not access:
+            flash("Lütfen önce giriş yapın.", "warning")
+            return redirect(url_for("login"))
+
+        # decide whether it's a rating, review or library action
+        if request.form.get("library_action"):
+            action = request.form.get("library_action")
+            status = request.form.get("status") or "watched"
+            if action == "add":
+                payload, status_code = api_request(
+                    "post",
+                    f"/api/content/{content_id}/library",
+                    json={"status": status},
+                    headers={"Authorization": f"Bearer {access}"},
+                )
+            else:
+                payload, status_code = api_request(
+                    "delete",
+                    f"/api/content/{content_id}/library",
+                    headers={"Authorization": f"Bearer {access}"},
+                )
+        elif request.form.get("score"):
+            score = request.form.get("score")
+            payload, status = api_request(
+                "post",
+                f"/api/content/{content_id}/ratings",
+                json={"score": score},
+                headers={"Authorization": f"Bearer {access}"},
+            )
+        else:
+            body = request.form.get("body")
+            payload, status = api_request(
+                "post",
+                f"/api/content/{content_id}/reviews",
+                json={"body": body},
+                headers={"Authorization": f"Bearer {access}"},
+            )
+
+        if status in (200, 201):
+            flash("İşlem başarıyla kaydedildi.", "success")
+        else:
+            flash(payload.get("message", "İşlem yapılamadı."), "danger")
+        # reload page
+        return redirect(request.path)
+
     payload, status = api_request("get", f"/api/content/{content_id}")
     if status == 404:
         return render_template("content_detail.html", content=None), 404
@@ -166,7 +215,12 @@ def content_detail(content_type: str, content_id: str):
 
 @app.route("/profile/<username>")
 def profile(username: str):
-    payload, status = api_request("get", f"/api/profiles/{username}")
+    headers = None
+    auth = session.get("auth", {})
+    access = auth.get("access_token")
+    if access:
+        headers = {"Authorization": f"Bearer {access}"}
+    payload, status = api_request("get", f"/api/profiles/{username}", headers=headers)
     if status == 404:
         return render_template("profile.html", profile=None), 404
     if status != 200:
@@ -178,7 +232,40 @@ def profile(username: str):
         library_tabs=payload.get("library", {}),
         featured_lists=payload.get("featured_lists", []),
         activities=payload.get("recent_activities", []),
+        is_following=payload.get("is_following", False),
     )
+
+
+
+
+@app.route('/follow/<username>', methods=['POST'])
+def follow(username: str):
+    auth = session.get('auth', {})
+    access = auth.get('access_token')
+    if not access:
+        flash('Giriş yapmalısınız', 'warning')
+        return redirect(url_for('login'))
+    payload, status = api_request('post', f'/api/users/{username}/follow', headers={'Authorization': f'Bearer {access}'})
+    if status in (200,201):
+        flash('Takip edildi', 'success')
+    else:
+        flash(payload.get('message','İşlem başarısız'), 'danger')
+    return redirect(url_for('profile', username=username))
+
+
+@app.route('/unfollow/<username>', methods=['POST'])
+def unfollow(username: str):
+    auth = session.get('auth', {})
+    access = auth.get('access_token')
+    if not access:
+        flash('Giriş yapmalısınız', 'warning')
+        return redirect(url_for('login'))
+    payload, status = api_request('delete', f'/api/users/{username}/follow', headers={'Authorization': f'Bearer {access}'})
+    if status == 200:
+        flash('Takipten çıkıldı', 'info')
+    else:
+        flash(payload.get('message','İşlem başarısız'), 'danger')
+    return redirect(url_for('profile', username=username))
 
 
 @app.route("/logout")

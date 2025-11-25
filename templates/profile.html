@@ -7,7 +7,7 @@
   </section>
 {% else %}
   <section class="profile-header">
-    <img src="{{ profile.avatar }}" alt="{{ profile.name }}" />
+    <img src="{{ profile.avatar or url_for('static', filename='default-avatar.svg') }}" alt="{{ profile.name }}" />
     <div>
       <p class="eyebrow">@{{ profile.username }}</p>
       <h1>{{ profile.name }}</h1>
@@ -17,8 +17,25 @@
         <span>{{ profile.following }} takip</span>
       </div>
       <div class="actions">
-        <button class="primary">Takip Et</button>
-        <button class="ghost">Mesaj Gönder</button>
+        {% if current_user and current_user.username == profile.username %}
+          <a class="primary" href="#">Profili Düzenle</a>
+          <a class="ghost" href="#">Yeni Özel Liste Oluştur</a>
+        {% else %}
+          {% if current_user %}
+            {% if is_following %}
+              <form method="post" action="{{ url_for('unfollow', username=profile.username) }}" style="display:inline-block">
+                <button class="ghost" type="submit">Takipten Çık</button>
+              </form>
+            {% else %}
+              <form method="post" action="{{ url_for('follow', username=profile.username) }}" style="display:inline-block">
+                <button class="primary" type="submit">Takip Et</button>
+              </form>
+            {% endif %}
+            <button class="ghost">Mesaj Gönder</button>
+          {% else %}
+            <a class="primary" href="{{ url_for('login') }}">Giriş Yap</a>
+          {% endif %}
+        {% endif %}
       </div>
     </div>
   </section>

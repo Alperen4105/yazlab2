@@ -16,9 +16,20 @@
         <p class="muted">{{ content.year }}</p>
       {% endif %}
       <div class="actions">
-        <button class="primary">Puan Ver</button>
-        <button>Listeme Ekle</button>
-        <button class="ghost">Özel Listeye Ekle</button>
+        {% if current_user %}
+          <form method="post" style="display:inline-block; margin-right:6px;">
+            <input type="hidden" name="library_action" value="add" />
+            <input type="hidden" name="status" value="watched" />
+            <button class="primary" type="submit">Kütüphaneme Ekle</button>
+          </form>
+          <form method="post" style="display:inline-block; margin-right:6px;">
+            <input type="hidden" name="library_action" value="remove" />
+            <button class="ghost" type="submit">Kütüphanemden Kaldır</button>
+          </form>
+          <button class="ghost">Özel Listeye Ekle</button>
+        {% else %}
+          <a class="primary" href="{{ url_for('login') }}">Giriş yaparak işlem yapabilirsiniz</a>
+        {% endif %}
       </div>
     </div>
   </section>
@@ -29,12 +40,24 @@
         <p class="eyebrow">Yorumlar</p>
         <h2>Topluluk geri bildirimleri</h2>
       </div>
-      <button class="ghost">Yeni Yorum</button>
+      {% if current_user %}
+        <form method="post" class="comment-form" style="display:inline-block; margin-left: 1rem;">
+          <textarea name="body" placeholder="Yorumunuzu yazın..." required rows="2" style="vertical-align:middle"></textarea>
+          <button type="submit" class="primary">Gönder</button>
+        </form>
+        <form method="post" class="score-form" style="display:inline-block; margin-left: 1rem;">
+          <label style="margin-right:6px">Puan:</label>
+          <input type="number" min="1" max="10" name="score" style="width:60px" />
+          <button type="submit" class="ghost">Puanla</button>
+        </form>
+      {% else %}
+        <a class="ghost" href="{{ url_for('login') }}">Giriş yaparak yorum yazabilirsiniz</a>
+      {% endif %}
     </div>
     <ul>
       {% for item in comments %}
         <li>
-          <img src="{{ item.avatar }}" alt="{{ item.user }}" />
+          <img src="{{ item.avatar or url_for('static', filename='default-avatar.svg') }}" alt="{{ item.user }}" />
           <div>
             <strong>{{ item.user }}</strong>
             <span class="timestamp">{{ item.timestamp }}</span>

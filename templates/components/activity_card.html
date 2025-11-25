@@ -1,9 +1,15 @@
 {% macro activity_card(activity) -%}
   <article class="activity-card activity-{{ activity.type }}">
     <header>
-      <img src="{{ activity.user.avatar }}" alt="{{ activity.user.name }}" />
+      <img src="{{ activity.user.avatar or url_for('static', filename='default-avatar.svg') }}" alt="{{ activity.user.name }}" />
       <div>
-        <strong><a href="{{ url_for('profile', username=activity.user.username) }}">{{ activity.user.name }}</a></strong>
+        <strong>
+          {% if activity.user.username %}
+            <a href="{{ url_for('profile', username=activity.user.username) }}">{{ activity.user.name }}</a>
+          {% else %}
+            {{ activity.user.name }}
+          {% endif %}
+        </strong>
         <p>
           {% if activity.type == "rating" %}{{ activity.user.name }} {{ activity.content.title }} için puan verdi.
           {% elif activity.type == "review" %}{{ activity.user.name }} {{ activity.content.title }} hakkında yorum yaptı.
@@ -22,8 +28,8 @@
           <h3>{{ activity.content.title }} ({{ activity.content.year }})</h3>
           {% if activity.type == "rating" %}
             <p class="score">Verilen puan: <span>{{ activity.score }}/10</span></p>
-          {% elif activity.type == "review" %}
-            <p class="excerpt">{{ activity.comment }}</p>
+            {% elif activity.type == "review" %}
+            <p class="excerpt">{{ (activity.comment or '') | truncate(180, True) }}</p>
             <a class="read-more" href="{{ url_for('content_detail', content_type=activity.content.kind, content_id=activity.content.id) }}">daha fazlasını oku →</a>
           {% elif activity.type == "list_add" %}
             <p>"{{ activity.list_name }}" listesine eklendi.</p>

@@ -126,7 +126,8 @@ class CustomListItem(db.Model):
     order_index = db.Column(db.Integer, default=0)
 
     list = db.relationship(
-        "CustomList", backref=db.backref("items", lazy="dynamic", order_by=order_index)
+        "CustomList",
+        backref=db.backref("items", lazy="dynamic", order_by=order_index, cascade="all, delete-orphan"),
     )
     content = db.relationship("Content")
 
