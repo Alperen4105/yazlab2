@@ -92,3 +92,45 @@ def test_explore_ingests_external_and_is_idempotent(monkeypatch):
                 )
                 db.session.add(cc)
             db.session.commit()
+
+
+def test_explore_calls_external_when_db_populated_but_no_match(monkeypatch):
+    # Ensure there are some existing contents that don't match the query
+    from app import app as flask_app
+    from backend.extensions import db
+    from backend.models import Content
+
+    with flask_app.app_context():
+        # ensure DB contains at least one unrelated entry
+        Content.query.delete()
+        c = Content(external_id='mov-999', content_type='movie', title='Some Movie', cover_url=None)
+        db.session.add(c)
+        db.session.commit()
+
+    movie = {
+        "external_id": "mov-external-1",
+        "id": "mov-external-1",
+        "title": "External Movie",
+        "year": "2022",
+        "poster": "http://img.mov",
+        "kind": "film",
+        "runtime_minutes": 100,
+        "extra": {},
+    }
+    # patch api module functions (api imports clients at top)
+    import backend.api as api
+    monkeypatch.setattr(api, "search_tmdb_movies", lambda q, limit=10: [movie])
+    monkeypatch.setattr(api, "search_google_books", lambda q, limit=10: [])
+
+    with flask_app.test_client() as client:
+        r = client.get('/api/explore?q=External+Movie')
+        assert r.status_code == 200
+        data = r.get_json()
+        # external result should be included
+        assert data and data.get('count', 0) >= 1
+
+    # cleanup
+    with flask_app.app_context():
+        Content.query.filter_by(external_id='mov-external-1').delete()
+        Content.query.filter_by(external_id='mov-999').delete()
+        db.session.commit()

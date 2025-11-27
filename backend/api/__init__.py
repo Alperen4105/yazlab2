@@ -154,8 +154,10 @@ def api_explore():
             }
             results.append(item)
 
-        # if the DB returned nothing for the query and the DB is small, try external search
-        if query and not results and Content.query.count() < 5:
+        # if the DB returned nothing for the query, try external search
+        # When a user explicitly searches and we don't have matching local results
+        # reach out to external sources (TMDb / Google Books) and ingest matches.
+        if query and not results:
             # try TMDb for movies and Google/OpenLibrary for books
             movie_results = search_tmdb_movies(query, limit=10)
             book_results = search_google_books(query, limit=10)

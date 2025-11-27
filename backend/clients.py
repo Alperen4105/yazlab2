@@ -14,6 +14,7 @@ except Exception:  # pragma: no cover - optional in minimal environments
     requests = None
     _HAS_REQUESTS = False
 from typing import List, Dict, Optional
+from dotenv import load_dotenv
 
 TMDB_KEY = os.getenv("TMDB_API_KEY")
 GOOGLE_BOOKS_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")
@@ -26,12 +27,23 @@ GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
 OPENLIB_SEARCH_URL = "https://openlibrary.org/search.json"
 
 
+def _reload_env_if_needed():
+    # ensure .env is loaded into os.environ in dev; safe no-op if already loaded
+    try:
+        load_dotenv(override=False)
+    except Exception:
+        pass
+
+
 def search_tmdb_movies(query: str, limit: int = 10) -> List[Dict]:
+    # Re-check API key at call time so .env can be added without restarting the process
+    _reload_env_if_needed()
+    local_key = TMDB_KEY or os.getenv("TMDB_API_KEY")
     # If API key or requests library is missing, return empty list gracefully
-    if not TMDB_KEY or not _HAS_REQUESTS:
+    if not local_key or not _HAS_REQUESTS:
         return []
-    params = {"api_key": TMDB_KEY, "query": query, "page": 1}
-    r = requests.get(TMDB_SEARCH_URL, params=params, timeout=5)
+    params = {"query": query, "page": 1}
+    r = requests.get(TMDB_SEARCH_URL, params={**params, "api_key": local_key}, timeout=5)
     if r.status_code != 200:
         return []
     data = r.json()
@@ -50,7 +62,7 @@ def search_tmdb_movies(query: str, limit: int = 10) -> List[Dict]:
         # optionally try to fetch details (runtime) when available
         try:
             details_url = TMDB_DETAILS_URL.format(id=item.get("id"))
-            dr = requests.get(details_url, params={"api_key": TMDB_KEY}, timeout=4)
+            dr = requests.get(details_url, params={"api_key": local_key}, timeout=4)
             if dr.status_code == 200:
                 ddata = dr.json()
                 mapped["runtime_minutes"] = ddata.get("runtime")
@@ -64,9 +76,11 @@ def search_tmdb_movies(query: str, limit: int = 10) -> List[Dict]:
 
 def search_google_books(query: str, limit: int = 10) -> List[Dict]:
     # use Google Books if key present, else fallback to Open Library
-    if GOOGLE_BOOKS_KEY and _HAS_REQUESTS:
-        params = {"q": query, "maxResults": limit, "key": GOOGLE_BOOKS_KEY}
-        r = requests.get(GOOGLE_BOOKS_URL, params=params, timeout=5)
+    _reload_env_if_needed()
+    local_gkey = GOOGLE_BOOKS_KEY or os.getenv("GOOGLE_BOOKS_API_KEY")
+    if local_gkey and _HAS_REQUESTS:
+        params = {"q": query, "maxResults": limit}
+        r = requests.get(GOOGLE_BOOKS_URL, params={**params, "key": local_gkey}, timeout=5)
         if r.status_code != 200:
             return []
         data = r.json()
