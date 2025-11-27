@@ -39,8 +39,14 @@
     {% endif %}
 
     <footer>
-      <button>👍 {{ activity.likes }}</button>
-      <button>💬 {{ activity.comments }}</button>
+      <form method="post" action="{{ url_for('activity_like', activity_id=activity.id.split('-')[-1]|int) }}" style="display:inline-block">
+        {% if current_user %}
+          <button class="ghost" type="submit">👍 {{ activity.likes }}</button>
+        {% else %}
+          <a class="ghost" href="{{ url_for('login') }}">👍 {{ activity.likes }}</a>
+        {% endif %}
+      </form>
+      <a class="ghost" href="{{ url_for('content_detail', content_type=activity.content.kind if activity.content else 'film', content_id=activity.content.id if activity.content else '') }}">💬 {{ activity.comments }}</a>
     </footer>
   </article>
 {%- endmacro %}

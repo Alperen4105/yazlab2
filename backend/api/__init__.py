@@ -21,7 +21,8 @@ from data.sample_data import (
     POPULAR_CONTENT,
     USER_PROFILES,
 )
-from backend.models import Activity, Content, LibraryItem, Rating, Review, CustomList, CustomListItem, Follow
+from backend.models import Activity, Content, LibraryItem, Rating, Review, ReviewReaction, CustomList, CustomListItem, Follow
+from backend.clients import search_tmdb_movies, search_google_books
 from datetime import timezone
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -34,10 +35,10 @@ def _paginate(items, page: int, per_page: int):
     return {
         "items": slice_,
         "page": page,
-        "per_page": per_page,
         "has_more": end < len(items),
         "total": len(items),
     }
+
 
 
 @api_bp.get("/feed")
@@ -153,10 +154,77 @@ def api_explore():
             }
             results.append(item)
 
-        sections = {"results": results}
-        return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
+        # if the DB returned nothing for the query and the DB is small, try external search
+        if query and not results and Content.query.count() < 5:
+            # try TMDb for movies and Google/OpenLibrary for books
+            movie_results = search_tmdb_movies(query, limit=10)
+            book_results = search_google_books(query, limit=10)
+            results_from_external = movie_results + book_results
+            out = []
+            for r in results_from_external:
+                # skip duplicates by external_id
+                if Content.query.filter_by(external_id=r.get("external_id")).first():
+                    continue
+                cont = Content(
+                    external_id=r.get("external_id"),
+                    content_type=("movie" if r.get("kind") == "film" else "book"),
+                    title=r.get("title") or "Untitled",
+                    release_year=int(r.get("year")) if r.get("year") else None,
+                    cover_url=r.get("poster") or None,
+                    runtime_minutes=r.get("runtime_minutes"),
+                    page_count=r.get("page_count"),
+                    extra_metadata=r.get("extra"),
+                )
+                db.session.add(cont)
+                db.session.flush()
+                out.append({
+                    "id": f"content-{cont.id}",
+                    "title": cont.title,
+                    "poster": cont.cover_url,
+                    "year": cont.release_year,
+                    "kind": "film" if cont.content_type == "movie" else "book",
+                })
+            db.session.commit()
+            if out:
+                sections = {"results": out}
+                return jsonify({"items": out, "sections": sections, "query": query, "count": len(out)})
+        else:
+            sections = {"results": results}
+            return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
 
     # fallback
+    # If DB is small (or empty) and caller provided a query, try external search/ingest
+    if query and Content.query.count() < 5 and not results:
+        movie_results = search_tmdb_movies(query, limit=10)
+        book_results = search_google_books(query, limit=10)
+        results_from_external = movie_results + book_results
+        out = []
+        for r in results_from_external:
+            if Content.query.filter_by(external_id=r.get("external_id")).first():
+                continue
+            cont = Content(
+                external_id=r.get("external_id"),
+                content_type=("movie" if r.get("kind") == "film" else "book"),
+                title=r.get("title") or "Untitled",
+                release_year=int(r.get("year")) if r.get("year") else None,
+                cover_url=r.get("poster") or None,
+                runtime_minutes=r.get("runtime_minutes"),
+                page_count=r.get("page_count"),
+                extra_metadata=r.get("extra"),
+            )
+            db.session.add(cont)
+            db.session.flush()
+            out.append({
+                "id": f"content-{cont.id}",
+                "title": cont.title,
+                "poster": cont.cover_url,
+                "year": cont.release_year,
+                "kind": "film" if cont.content_type == "movie" else "book",
+            })
+        db.session.commit()
+        if out:
+            sections = {"results": out}
+            return jsonify({"items": out, "sections": sections, "query": query, "count": len(out)})
     for section_name, section_items in POPULAR_CONTENT.items():
         filtered = []
         for item in section_items:
@@ -229,8 +297,40 @@ def api_content_detail(content_id: str):
 
     # collect reviews
     comments = []
+    # optional: check caller for whether they reacted to reviews
+    caller = None
+    try:
+        verify_jwt_in_request(optional=True)
+        caller = get_jwt_identity()
+        try:
+            caller = int(caller)
+        except Exception:
+            pass
+    except Exception:
+        caller = None
+
     for rev in c.reviews:
-        comments.append({"user": rev.user.username, "text": rev.body, "timestamp": rev.created_at.isoformat() if rev.created_at else None})
+        reactions = {"like": 0, "dislike": 0}
+        for r in rev.reactions:
+            if r.reaction_type == 'like':
+                reactions['like'] += 1
+            else:
+                reactions['dislike'] += 1
+
+        comments.append(
+            {
+                "id": rev.id,
+                "user": rev.user.username,
+                "user_id": rev.user_id,
+                "avatar": rev.user.avatar_url,
+                "text": rev.body,
+                "timestamp": rev.created_at.isoformat() if rev.created_at else None,
+                "reactions": reactions,
+                "current_user_reaction": bool(
+                    any(r.user_id == caller for r in rev.reactions) if caller else False
+                ),
+            }
+        )
 
     content = {
         "id": f"content-{c.id}",
@@ -373,6 +473,66 @@ def api_delete_review(review_id: int):
     db.session.delete(review)
     db.session.commit()
     return jsonify({"message": "review deleted"})
+
+
+@api_bp.post("/activities/<int:activity_id>/like")
+@jwt_required()
+def api_like_activity(activity_id: int):
+    # increment likes counter in Activity.extra_metadata (simple implementation)
+    a = Activity.query.get(activity_id)
+    if not a:
+        return jsonify({"message": "Activity not found"}), 404
+    meta = a.extra_metadata or {}
+    likes = meta.get("likes") or 0
+    likes += 1
+    meta["likes"] = likes
+    a.extra_metadata = meta
+    db.session.commit()
+    return jsonify({"message": "liked", "likes": likes})
+
+
+@api_bp.post("/reviews/<int:review_id>/reactions")
+@jwt_required()
+def api_add_review_reaction(review_id: int):
+    data = request.get_json() or {}
+    reaction_type = data.get("reaction_type")
+    if reaction_type not in ("like", "dislike"):
+        return jsonify({"message": "reaction_type must be 'like' or 'dislike'"}), 400
+
+    identity = get_jwt_identity()
+    try:
+        identity = int(identity)
+    except Exception:
+        pass
+
+    review = Review.query.get(review_id)
+    if not review:
+        return jsonify({"message": "review not found"}), 404
+
+    exists = ReviewReaction.query.filter_by(review_id=review_id, user_id=identity).first()
+    if exists:
+        return jsonify({"message": "already reacted"}), 409
+
+    rr = ReviewReaction(review_id=review_id, user_id=identity, reaction_type=reaction_type)
+    db.session.add(rr)
+    db.session.commit()
+    return jsonify({"message": "reacted", "reaction": {"id": rr.id, "type": rr.reaction_type}}), 201
+
+
+@api_bp.delete("/reviews/<int:review_id>/reactions")
+@jwt_required()
+def api_remove_review_reaction(review_id: int):
+    identity = get_jwt_identity()
+    try:
+        identity = int(identity)
+    except Exception:
+        pass
+    rr = ReviewReaction.query.filter_by(review_id=review_id, user_id=identity).first()
+    if not rr:
+        return jsonify({"message": "reaction not found"}), 404
+    db.session.delete(rr)
+    db.session.commit()
+    return jsonify({"message": "reaction removed"})
 
 
 @api_bp.post("/content/<content_id>/library")

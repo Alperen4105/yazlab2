@@ -160,8 +160,42 @@ def content_detail(content_type: str, content_id: str):
             flash("Lütfen önce giriş yapın.", "warning")
             return redirect(url_for("login"))
 
-        # decide whether it's a rating, review or library action
-        if request.form.get("library_action"):
+        # decide whether it's a rating, review, edit/delete review, reaction, or library action
+        # handling edit/delete/reaction for reviews
+        if request.form.get("edit_review_id"):
+            review_id = request.form.get("edit_review_id")
+            body = request.form.get("body")
+            payload, status = api_request(
+                "put",
+                f"/api/reviews/{review_id}",
+                json={"body": body},
+                headers={"Authorization": f"Bearer {access}"},
+            )
+        elif request.form.get("delete_review_id"):
+            review_id = request.form.get("delete_review_id")
+            payload, status = api_request(
+                "delete",
+                f"/api/reviews/{review_id}",
+                headers={"Authorization": f"Bearer {access}"},
+            )
+        elif request.form.get("react_review_id"):
+            rv = request.form.get("react_review_id")
+            action = request.form.get("reaction_action")
+            rtype = request.form.get("reaction_type")
+            if action == "add":
+                payload, status = api_request(
+                    "post",
+                    f"/api/reviews/{rv}/reactions",
+                    json={"reaction_type": rtype},
+                    headers={"Authorization": f"Bearer {access}"},
+                )
+            else:
+                payload, status = api_request(
+                    "delete",
+                    f"/api/reviews/{rv}/reactions",
+                    headers={"Authorization": f"Bearer {access}"},
+                )
+        elif request.form.get("library_action"):
             action = request.form.get("library_action")
             status = request.form.get("status") or "watched"
             if action == "add":
@@ -266,6 +300,23 @@ def unfollow(username: str):
     else:
         flash(payload.get('message','İşlem başarısız'), 'danger')
     return redirect(url_for('profile', username=username))
+
+
+@app.route('/activity/<int:activity_id>/like', methods=['POST'])
+def activity_like(activity_id: int):
+    auth = session.get('auth', {})
+    access = auth.get('access_token')
+    if not access:
+        flash('Lütfen önce giriş yapın.', 'warning')
+        return redirect(url_for('login'))
+
+    payload, status = api_request('post', f'/api/activities/{activity_id}/like', headers={'Authorization': f'Bearer {access}'})
+    if status in (200, 201):
+        flash('Beğenildi', 'success')
+    else:
+        flash(payload.get('message', 'İşlem başarısız'), 'danger')
+    # redirect back
+    return redirect(request.referrer or url_for('feed'))
 
 
 @app.route("/logout")
