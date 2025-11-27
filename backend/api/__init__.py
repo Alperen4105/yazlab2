@@ -24,6 +24,7 @@ from data.sample_data import (
 from backend.models import Activity, Content, LibraryItem, Rating, Review, ReviewReaction, CustomList, CustomListItem, Follow
 from backend.clients import search_tmdb_movies, search_google_books
 from datetime import timezone
+import os
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -159,12 +160,63 @@ def api_explore():
         # reach out to external sources (TMDb / Google Books) and ingest matches.
         if query and not results:
             # try TMDb for movies and Google/OpenLibrary for books
-            movie_results = search_tmdb_movies(query, limit=10)
-            book_results = search_google_books(query, limit=10)
-            results_from_external = movie_results + book_results
-            out = []
-            for r in results_from_external:
-                # skip duplicates by external_id
+                movie_results = search_tmdb_movies(query, limit=10)
+                book_results = search_google_books(query, limit=10)
+                results_from_external = movie_results + book_results
+                out = []
+                ingest_enabled = os.getenv("INGEST_EXTERNAL_RESULTS", "false").lower() == "true"
+                for r in results_from_external:
+                    if ingest_enabled:
+                        # ingest to DB if opt-in requested
+                        if Content.query.filter_by(external_id=r.get("external_id")).first():
+                            continue
+                        cont = Content(
+                            external_id=r.get("external_id"),
+                            content_type=("movie" if r.get("kind") == "film" else "book"),
+                            title=r.get("title") or "Untitled",
+                            release_year=int(r.get("year")) if r.get("year") else None,
+                            cover_url=r.get("poster") or None,
+                            runtime_minutes=r.get("runtime_minutes"),
+                            page_count=r.get("page_count"),
+                            extra_metadata=r.get("extra"),
+                        )
+                        db.session.add(cont)
+                        db.session.flush()
+                        out.append({
+                            "id": f"content-{cont.id}",
+                            "title": cont.title,
+                            "poster": cont.cover_url,
+                            "year": cont.release_year,
+                            "kind": "film" if cont.content_type == "movie" else "book",
+                        })
+                    else:
+                        # do not persist search results in DB by default; return mapped items
+                        out.append({
+                            "id": r.get("id") or r.get("external_id"),
+                            "title": r.get("title"),
+                            "poster": r.get("poster"),
+                            "year": int(r.get("year")) if r.get("year") else None,
+                            "kind": "film" if r.get("kind") == "film" else "book",
+                        })
+                if ingest_enabled:
+                    db.session.commit()
+                if out:
+                    sections = {"results": out}
+                    return jsonify({"items": out, "sections": sections, "query": query, "count": len(out)})
+        else:
+            sections = {"results": results}
+            return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
+
+    # fallback
+    # If DB is small (or empty) and caller provided a query, try external search/ingest
+    if query and not results:
+        movie_results = search_tmdb_movies(query, limit=10)
+        book_results = search_google_books(query, limit=10)
+        results_from_external = movie_results + book_results
+        out = []
+        ingest_enabled = os.getenv("INGEST_EXTERNAL_RESULTS", "false").lower() == "true"
+        for r in results_from_external:
+            if ingest_enabled:
                 if Content.query.filter_by(external_id=r.get("external_id")).first():
                     continue
                 cont = Content(
@@ -186,44 +238,16 @@ def api_explore():
                     "year": cont.release_year,
                     "kind": "film" if cont.content_type == "movie" else "book",
                 })
+            else:
+                out.append({
+                    "id": r.get("id") or r.get("external_id"),
+                    "title": r.get("title"),
+                    "poster": r.get("poster"),
+                    "year": int(r.get("year")) if r.get("year") else None,
+                    "kind": "film" if r.get("kind") == "film" else "book",
+                })
+        if ingest_enabled:
             db.session.commit()
-            if out:
-                sections = {"results": out}
-                return jsonify({"items": out, "sections": sections, "query": query, "count": len(out)})
-        else:
-            sections = {"results": results}
-            return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
-
-    # fallback
-    # If DB is small (or empty) and caller provided a query, try external search/ingest
-    if query and Content.query.count() < 5 and not results:
-        movie_results = search_tmdb_movies(query, limit=10)
-        book_results = search_google_books(query, limit=10)
-        results_from_external = movie_results + book_results
-        out = []
-        for r in results_from_external:
-            if Content.query.filter_by(external_id=r.get("external_id")).first():
-                continue
-            cont = Content(
-                external_id=r.get("external_id"),
-                content_type=("movie" if r.get("kind") == "film" else "book"),
-                title=r.get("title") or "Untitled",
-                release_year=int(r.get("year")) if r.get("year") else None,
-                cover_url=r.get("poster") or None,
-                runtime_minutes=r.get("runtime_minutes"),
-                page_count=r.get("page_count"),
-                extra_metadata=r.get("extra"),
-            )
-            db.session.add(cont)
-            db.session.flush()
-            out.append({
-                "id": f"content-{cont.id}",
-                "title": cont.title,
-                "poster": cont.cover_url,
-                "year": cont.release_year,
-                "kind": "film" if cont.content_type == "movie" else "book",
-            })
-        db.session.commit()
         if out:
             sections = {"results": out}
             return jsonify({"items": out, "sections": sections, "query": query, "count": len(out)})
