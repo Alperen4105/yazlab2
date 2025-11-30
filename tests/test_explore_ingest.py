@@ -57,6 +57,12 @@ def test_explore_returns_external_without_persisting_by_default(monkeypatch):
         assert r.status_code == 200
         data = r.get_json()
         assert data and data.get("count", 0) >= 2
+        # ensure returned items indicate source and are not persisted
+        ids = {it["id"]: it for it in data.get("items", [])}
+        assert "mov-test-1" in ids and ids["mov-test-1"].get("persisted") is False
+        assert ids["mov-test-1"].get("source") == "tmdb"
+        assert "book-test-1" in ids and ids["book-test-1"].get("persisted") is False
+        assert ids["book-test-1"].get("source") in ("google_books", "openlibrary")
 
         # check DB has no new entries (no persistence by default)
         with flask_app.app_context():
@@ -126,6 +132,8 @@ def test_explore_ingests_when_toggle_enabled(monkeypatch):
         assert r.status_code == 200
         data = r.get_json()
         assert data and data.get('count', 0) >= 1
+        # returned items should be persisted since ingestion is enabled
+        assert any(it.get('persisted') is True for it in data.get('items', []))
 
         with flask_app.app_context():
             m = Content.query.filter_by(external_id='mov-test-ingest').first()
@@ -170,6 +178,10 @@ def test_explore_calls_external_when_db_populated_but_no_match(monkeypatch):
         data = r.get_json()
         # external result should be included
         assert data and data.get('count', 0) >= 1
+        # external results should be marked non-persisted by default
+        it = data.get('items', [])[0]
+        assert it.get('persisted') is False
+        assert it.get('source') == 'tmdb'
 
     # cleanup
     with flask_app.app_context():

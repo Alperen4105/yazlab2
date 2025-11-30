@@ -26,12 +26,20 @@
         <article class="content-card">
           <img src="{{ item.poster }}" alt="{{ item.title }}" />
           <div>
+            {% if not item.persisted %}
+              <span class="badge external">Canlı — {{ item.source | replace('_', ' ') | title }}</span>
+            {% endif %}
             <p class="muted">{{ item.kind | upper }}</p>
             <h3>{{ item.title }}</h3>
             {% if item.score %}
               <p class="score">{{ item.score }}/10 ortalama</p>
             {% elif item.comments %}
               <p class="score">{{ item.comments }} yorum</p>
+            {% endif %}
+            {% if item.runtime_minutes %}
+              <p class="muted small">Süre: {{ item.runtime_minutes }} dk</p>
+            {% elif item.page_count %}
+              <p class="muted small">Sayfa: {{ item.page_count }}</p>
             {% endif %}
             <a href="{{ url_for('content_detail', content_type=item.kind, content_id=item.id) }}">Detaylar</a>
           </div>

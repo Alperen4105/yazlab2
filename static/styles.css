@@ -321,6 +321,21 @@ button {
   padding: 1rem;
 }
 
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+.badge.external {
+  background: linear-gradient(90deg,#ffedd5,#fde68a);
+  color: #92400e;
+}
+
 .content-hero {
   grid-template-columns: 220px 1fr;
 }

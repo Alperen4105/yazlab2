@@ -22,7 +22,12 @@ from data.sample_data import (
     USER_PROFILES,
 )
 from backend.models import Activity, Content, LibraryItem, Rating, Review, ReviewReaction, CustomList, CustomListItem, Follow
-from backend.clients import search_tmdb_movies, search_google_books
+from backend.clients import (
+    search_tmdb_movies,
+    search_google_books,
+    get_tmdb_movie_details,
+    get_book_details,
+)
 from datetime import timezone
 import os
 
@@ -152,6 +157,8 @@ def api_explore():
                 "poster": c.cover_url,
                 "score": round(avg, 1) if avg is not None else None,
                 "kind": "film" if c.content_type == "movie" else "book",
+                "persisted": True,
+                "source": "local",
             }
             results.append(item)
 
@@ -188,6 +195,8 @@ def api_explore():
                             "poster": cont.cover_url,
                             "year": cont.release_year,
                             "kind": "film" if cont.content_type == "movie" else "book",
+                            "persisted": True,
+                            "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else "books"),
                         })
                     else:
                         # do not persist search results in DB by default; return mapped items
@@ -197,6 +206,10 @@ def api_explore():
                             "poster": r.get("poster"),
                             "year": int(r.get("year")) if r.get("year") else None,
                             "kind": "film" if r.get("kind") == "film" else "book",
+                            "persisted": False,
+                            "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else ("openlibrary" if (r.get("external_id") or "").startswith("/") else "google_books")),
+                            "runtime_minutes": r.get("runtime_minutes"),
+                            "page_count": r.get("page_count"),
                         })
                 if ingest_enabled:
                     db.session.commit()
@@ -232,20 +245,26 @@ def api_explore():
                 db.session.add(cont)
                 db.session.flush()
                 out.append({
-                    "id": f"content-{cont.id}",
-                    "title": cont.title,
-                    "poster": cont.cover_url,
-                    "year": cont.release_year,
-                    "kind": "film" if cont.content_type == "movie" else "book",
-                })
+                        "id": f"content-{cont.id}",
+                        "title": cont.title,
+                        "poster": cont.cover_url,
+                        "year": cont.release_year,
+                        "kind": "film" if cont.content_type == "movie" else "book",
+                        "persisted": True,
+                        "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else "books"),
+                    })
             else:
                 out.append({
-                    "id": r.get("id") or r.get("external_id"),
-                    "title": r.get("title"),
-                    "poster": r.get("poster"),
-                    "year": int(r.get("year")) if r.get("year") else None,
-                    "kind": "film" if r.get("kind") == "film" else "book",
-                })
+                        "id": r.get("id") or r.get("external_id"),
+                        "title": r.get("title"),
+                        "poster": r.get("poster"),
+                        "year": int(r.get("year")) if r.get("year") else None,
+                        "kind": "film" if r.get("kind") == "film" else "book",
+                        "persisted": False,
+                        "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else ("openlibrary" if (r.get("external_id") or "").startswith("/") else "google_books")),
+                        "runtime_minutes": r.get("runtime_minutes"),
+                        "page_count": r.get("page_count"),
+                    })
         if ingest_enabled:
             db.session.commit()
         if out:
@@ -258,8 +277,12 @@ def api_explore():
                 continue
             if min_score and item.get("score") and item["score"] < float(min_score):
                 continue
-            filtered.append(item)
-            results.append(item)
+            # clone the sample item and add explicit flags so UI can display source/persisted
+            item_copy = dict(item)
+            item_copy["persisted"] = False
+            item_copy["source"] = "sample"
+            filtered.append(item_copy)
+            results.append(item_copy)
         if filtered:
             sections[section_name] = filtered
 
@@ -300,7 +323,37 @@ def api_content_detail(content_id: str):
             all_items.extend(collection)
         content = next((item for item in all_items if item["id"] == content_id), None)
         if not content:
-            return jsonify({"message": "Content not found"}), 404
+                # try live external fetching for external ids (mov-..., book-...)
+                if content_id.startswith("mov-"):
+                    # ask clients for TMDb details
+                    ext = get_tmdb_movie_details(content_id)
+                    if ext:
+                        cont = {
+                            "id": ext.get("id"),
+                            "title": ext.get("title"),
+                            "year": ext.get("year"),
+                            "poster": ext.get("poster"),
+                            "kind": "film",
+                            "platform_score": None,
+                            "total_votes": 0,
+                            "meta": {"runtime_minutes": ext.get("runtime_minutes")},
+                        }
+                        return jsonify({"content": cont, "comments": []})
+                if content_id.startswith("book-"):
+                    ext = get_book_details(content_id)
+                    if ext:
+                        cont = {
+                            "id": ext.get("id"),
+                            "title": ext.get("title"),
+                            "year": ext.get("year"),
+                            "poster": ext.get("poster"),
+                            "kind": "book",
+                            "platform_score": None,
+                            "total_votes": 0,
+                            "meta": {"page_count": ext.get("page_count")},
+                        }
+                        return jsonify({"content": cont, "comments": []})
+                return jsonify({"message": "Content not found"}), 404
         comments = [
             {
                 "user": "elifkara",

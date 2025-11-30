@@ -37,6 +37,8 @@ def test_tmdb_mapping_includes_runtime(monkeypatch):
 def test_google_books_mapping_and_pagecount(monkeypatch):
     monkeypatch.setattr(clients, "_HAS_REQUESTS", True)
     monkeypatch.setattr(clients, "GOOGLE_BOOKS_KEY", "dummykey")
+    # ensure previous tests' cache doesn't leak into this test
+    clients._CACHE.clear()
 
     def fake_get(url, params=None, timeout=None):
         if "volumes" in url:
