@@ -129,7 +129,6 @@ def api_feed():
 @api_bp.get("/explore")
 def api_explore():
     query = request.args.get("q", "").lower()
-    min_score = request.args.get("min_score")
     results = []
     sections = {}
 
@@ -148,8 +147,6 @@ def api_explore():
                 scores = [r.score for r in c.ratings]
                 if scores:
                     avg = sum(scores) / len(scores)
-            if min_score and avg is not None and avg < float(min_score):
-                continue
 
             item = {
                 "id": f"content-{c.id}",
@@ -161,6 +158,17 @@ def api_explore():
                 "source": "local",
             }
             results.append(item)
+
+        # if the DB returned results, split by type
+        if results:
+            films = [r for r in results if r["kind"] == "film"]
+            books = [r for r in results if r["kind"] == "book"]
+            sections = {}
+            if films:
+                sections["Filmler"] = films
+            if books:
+                sections["Kitaplar"] = books
+            return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
 
         # if the DB returned nothing for the query, try external search
         # When a user explicitly searches and we don't have matching local results
@@ -214,11 +222,14 @@ def api_explore():
                 if ingest_enabled:
                     db.session.commit()
                 if out:
-                    sections = {"results": out}
+                    films = [r for r in out if r["kind"] == "film"]
+                    books = [r for r in out if r["kind"] == "book"]
+                    sections = {}
+                    if films:
+                        sections["Filmler"] = films
+                    if books:
+                        sections["Kitaplar"] = books
                     return jsonify({"items": out, "sections": sections, "query": query, "count": len(out)})
-        else:
-            sections = {"results": results}
-            return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
 
     # fallback
     # If DB is small (or empty) and caller provided a query, try external search/ingest
@@ -268,14 +279,18 @@ def api_explore():
         if ingest_enabled:
             db.session.commit()
         if out:
-            sections = {"results": out}
+            films = [r for r in out if r["kind"] == "film"]
+            books = [r for r in out if r["kind"] == "book"]
+            sections = {}
+            if films:
+                sections["Filmler"] = films
+            if books:
+                sections["Kitaplar"] = books
             return jsonify({"items": out, "sections": sections, "query": query, "count": len(out)})
     for section_name, section_items in POPULAR_CONTENT.items():
         filtered = []
         for item in section_items:
             if query and query not in item["title"].lower():
-                continue
-            if min_score and item.get("score") and item["score"] < float(min_score):
                 continue
             # clone the sample item and add explicit flags so UI can display source/persisted
             item_copy = dict(item)

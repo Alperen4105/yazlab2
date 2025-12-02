@@ -1,110 +1,127 @@
-{% extends "base.html" %}
-{% block content %}
-{% if not content %}
-  <section>
-    <h1>İçerik bulunamadı</h1>
-    <p>Aradığınız kayıt kaldırılmış olabilir.</p>
-    <a href="{{ url_for('explore') }}">Keşfet sayfasına dön</a>
-  </section>
+{% extends "base.html" %} {% block content %} {% if not content %}
+<section>
+  <h1>İçerik bulunamadı</h1>
+  <p>Aradığınız kayıt kaldırılmış olabilir.</p>
+  <a href="{{ url_for('explore') }}">Keşfet sayfasına dön</a>
+</section>
 {% else %}
-  <section class="content-hero">
-    <img src="{{ content.poster }}" alt="{{ content.title }}" />
-    <div>
-      <p class="eyebrow">{{ content.kind | upper }}</p>
-      <h1>{{ content.title }}</h1>
-      {% if content.year %}
-        <p class="muted">{{ content.year }}</p>
-      {% endif %}
-      {% if content.meta and content.meta.runtime_minutes %}
-        <p class="muted">Süre: {{ content.meta.runtime_minutes }} dk</p>
-      {% endif %}
-      {% if content.meta and content.meta.page_count %}
-        <p class="muted">Sayfa sayısı: {{ content.meta.page_count }}</p>
-      {% endif %}
-      <div class="actions">
-        {% if current_user %}
-          <form method="post" style="display:inline-block; margin-right:6px;">
-            <input type="hidden" name="library_action" value="add" />
-            <input type="hidden" name="status" value="watched" />
-            <button class="primary" type="submit">Kütüphaneme Ekle</button>
-          </form>
-          <form method="post" style="display:inline-block; margin-right:6px;">
-            <input type="hidden" name="library_action" value="remove" />
-            <button class="ghost" type="submit">Kütüphanemden Kaldır</button>
-          </form>
-          <button class="ghost">Özel Listeye Ekle</button>
-        {% else %}
-          <a class="primary" href="{{ url_for('login') }}">Giriş yaparak işlem yapabilirsiniz</a>
-        {% endif %}
-      </div>
-    </div>
-  </section>
-
-  <section class="comments">
-    <div class="section-heading">
-      <div>
-        <p class="eyebrow">Yorumlar</p>
-        <h2>Topluluk geri bildirimleri</h2>
-      </div>
+<section class="content-hero">
+  <img
+    src="{{ content.poster or url_for('static', filename='placeholder-content.svg') }}"
+    alt="{{ content.title }}"
+  />
+  <div>
+    <p class="eyebrow">{{ content.kind | upper }}</p>
+    <h1>{{ content.title }}</h1>
+    {% if content.year %}
+    <p class="muted">{{ content.year }}</p>
+    {% endif %} {% if content.meta and content.meta.runtime_minutes %}
+    <p class="muted">Süre: {{ content.meta.runtime_minutes }} dk</p>
+    {% endif %} {% if content.meta and content.meta.page_count %}
+    <p class="muted">Sayfa sayısı: {{ content.meta.page_count }}</p>
+    {% endif %}
+    <div class="actions">
       {% if current_user %}
-        <form method="post" class="comment-form" style="display:inline-block; margin-left: 1rem;">
-          <textarea name="body" placeholder="Yorumunuzu yazın..." required rows="2" style="vertical-align:middle"></textarea>
-          <button type="submit" class="primary">Gönder</button>
-        </form>
-        <form method="post" class="score-form" style="display:inline-block; margin-left: 1rem;">
-          <label style="margin-right:6px">Puan:</label>
-          <input type="number" min="1" max="10" name="score" style="width:60px" />
-          <button type="submit" class="ghost">Puanla</button>
-        </form>
+      <form method="post" style="display: inline-block; margin-right: 6px">
+        <input type="hidden" name="library_action" value="add" />
+        <input type="hidden" name="status" value="watched" />
+        <button class="primary" type="submit">Kütüphaneme Ekle</button>
+      </form>
+      <form method="post" style="display: inline-block; margin-right: 6px">
+        <input type="hidden" name="library_action" value="remove" />
+        <button class="ghost" type="submit">Kütüphanemden Kaldır</button>
+      </form>
+      <button class="ghost">Özel Listeye Ekle</button>
       {% else %}
-        <a class="ghost" href="{{ url_for('login') }}">Giriş yaparak yorum yazabilirsiniz</a>
+      <a class="primary" href="{{ url_for('login') }}"
+        >Giriş yaparak işlem yapabilirsiniz</a
+      >
       {% endif %}
     </div>
-    <ul>
-      {% for item in comments %}
-        <li>
-          <img src="{{ item.avatar or url_for('static', filename='default-avatar.svg') }}" alt="{{ item.user }}" />
-          <div>
-            <strong>{{ item.user }}</strong>
-            <span class="timestamp">{{ item.timestamp }}</span>
-            <p>{{ item.text }}</p>
+  </div>
+</section>
 
-            <div class="comment-actions">
-              {% if current_user and current_user.username == item.user %}
-                <form method="post" style="display:inline-block; margin-right:6px;">
-                  <input type="hidden" name="edit_review_id" value="{{ item.id }}" />
-                  <textarea name="body" required rows="2">{{ item.text }}</textarea>
-                  <button type="submit" class="primary">Güncelle</button>
-                </form>
-                <form method="post" style="display:inline-block">
-                  <input type="hidden" name="delete_review_id" value="{{ item.id }}" />
-                  <button type="submit" class="ghost">Sil</button>
-                </form>
-              {% endif %}
+<section class="comments">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Yorumlar</p>
+      <h2>Topluluk geri bildirimleri</h2>
+    </div>
+    {% if current_user %}
+    <form
+      method="post"
+      class="comment-form"
+      style="display: inline-block; margin-left: 1rem"
+    >
+      <textarea
+        name="body"
+        placeholder="Yorumunuzu yazın..."
+        required
+        rows="2"
+        style="vertical-align: middle"
+      ></textarea>
+      <button type="submit" class="primary">Gönder</button>
+    </form>
+    <form
+      method="post"
+      class="score-form"
+      style="display: inline-block; margin-left: 1rem"
+    >
+      <label style="margin-right: 6px">Puan:</label>
+      <input type="number" min="1" max="10" name="score" style="width: 60px" />
+      <button type="submit" class="ghost">Puanla</button>
+    </form>
+    {% else %}
+    <a class="ghost" href="{{ url_for('login') }}"
+      >Giriş yaparak yorum yazabilirsiniz</a
+    >
+    {% endif %}
+  </div>
+  <ul>
+    {% for item in comments %}
+    <li>
+      <img
+        src="{{ item.avatar or url_for('static', filename='default-avatar.svg') }}"
+        alt="{{ item.user }}"
+      />
+      <div>
+        <strong>{{ item.user }}</strong>
+        <span class="timestamp">{{ item.timestamp }}</span>
+        <p>{{ item.text }}</p>
 
-              {% if current_user %}
-                {% if item.current_user_reaction %}
-                  <form method="post" style="display:inline-block; margin-left:6px;">
-                    <input type="hidden" name="react_review_id" value="{{ item.id }}" />
-                    <input type="hidden" name="reaction_action" value="remove" />
-                    <button type="submit">💔 {{ item.reactions.like }}</button>
-                  </form>
-                {% else %}
-                  <form method="post" style="display:inline-block; margin-left:6px;">
-                    <input type="hidden" name="react_review_id" value="{{ item.id }}" />
-                    <input type="hidden" name="reaction_action" value="add" />
-                    <input type="hidden" name="reaction_type" value="like" />
-                    <button type="submit">♥ {{ item.reactions.like }}</button>
-                  </form>
-                {% endif %}
-              {% endif %}
-            </div>
-
-          </div>
-        </li>
-      {% endfor %}
-    </ul>
-  </section>
-{% endif %}
-{% endblock %}
-
+        <div class="comment-actions">
+          {% if current_user and current_user.username == item.user %}
+          <form method="post" style="display: inline-block; margin-right: 6px">
+            <input type="hidden" name="edit_review_id" value="{{ item.id }}" />
+            <textarea name="body" required rows="2">{{ item.text }}</textarea>
+            <button type="submit" class="primary">Güncelle</button>
+          </form>
+          <form method="post" style="display: inline-block">
+            <input
+              type="hidden"
+              name="delete_review_id"
+              value="{{ item.id }}"
+            />
+            <button type="submit" class="ghost">Sil</button>
+          </form>
+          {% endif %} {% if current_user %} {% if item.current_user_reaction %}
+          <form method="post" style="display: inline-block; margin-left: 6px">
+            <input type="hidden" name="react_review_id" value="{{ item.id }}" />
+            <input type="hidden" name="reaction_action" value="remove" />
+            <button type="submit">💔 {{ item.reactions.like }}</button>
+          </form>
+          {% else %}
+          <form method="post" style="display: inline-block; margin-left: 6px">
+            <input type="hidden" name="react_review_id" value="{{ item.id }}" />
+            <input type="hidden" name="reaction_action" value="add" />
+            <input type="hidden" name="reaction_type" value="like" />
+            <button type="submit">♥ {{ item.reactions.like }}</button>
+          </form>
+          {% endif %} {% endif %}
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %} {% endblock %}

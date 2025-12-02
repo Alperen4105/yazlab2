@@ -134,11 +134,10 @@ def forgot_password():
 @app.route("/explore")
 def explore():
     query = request.args.get("q", "").strip()
-    min_score = request.args.get("min_score")
     payload, status = api_request(
         "get",
         "/api/explore",
-        query_string={"q": query, "min_score": min_score},
+        query_string={"q": query},
     )
     if status != 200:
         abort(status)
@@ -146,7 +145,6 @@ def explore():
         "explore.html",
         sections=payload.get("sections", {}),
         query=query,
-        min_score=min_score or "",
     )
 
 
