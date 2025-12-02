@@ -64,3 +64,73 @@ Bu dosya, bu repository (yazlab2) içinde Copilot ve diğer yapay zeka destekli 
 Eğer isterseniz, bu kuralları `README.md` içinde kısa bir başlıkla işaretleyebilirim (katkıda bulunanlar için görünür link). Daha sonra CI konfigürasyonuna (örn. bir `pre-commit` hook ile) basit bir uyarı mekanizması eklemek de faydalı olacaktır.
 
 Teşekkürler — bu rehberi repo seviyesinde tutarlı şekilde uygulamak proje güvenliği ve kalitesi için yardımcı olacaktır.
+
+---
+
+## Proje mimarisi, veritabanı ve kullanılan ana fonksiyonlar (özet)
+
+Aşağıda repository içindeki "neden" ve "nerede" sorularına pratik, kısa ve geliştirici-odaklı cevaplar yer alır — bu kısım dokümantasyon amaçlıdır ve `backend/` içindeki dosyalara referans verir.
+
+### 1) Genel yapı
+- `app.py` — uygulamanın giriş noktası; frontend yüzü (`templates/`) ile `backend` API istemcisini bağlar (`backend.init_app`).
+- `backend/` — uygulamanın sunucu tarafı mantığı:
+  - `api/__init__.py` — REST benzeri endpoint'lerin tamamı (feed, explore, content-detail, auth, ratings, reviews, library, lists, follow, reactions vb.). UI'nin veri kaynağı burada bulunur.
+  - `clients.py` — dış kaynak (TMDb, Google Books, OpenLibrary) için küçük helper fonksiyonlar; arama ve detay çekme; ayrıca (development amaçlı) in-memory TTL cache ve basit per-provider rate limiter içerir.
+  - `models/__init__.py` — SQLAlchemy modelleri; kullanıcılar, içerikler, rating, review, liste ve activity tabloları yer alır.
+  - `fixtures.py` ve `data/sample_data.py` — başlangıç verisi ve test/demo için sabit içerikler.
+
+### 2) Neden bu fonksiyonlar ve ne için kullanılıyor — clients (dış API) tarafı
+Ana klient fonksiyonlar ve kullanım amaçları:
+
+- `search_tmdb_movies(query, limit)`
+  - Ne yapar: TMDb (The Movie Database) araması yapar, dönene sonuçları proje formatına (mapping) çevirir.
+  - Neden var: Kullanıcılar keşfetirken DB'de olmayan film içeriklerini bulmak ve (opsiyonel) ingest etmek için kullanılır.
+  - Önemli not: fonksiyon artık bir in-memory cache kullanır (anahtar: `tmdb:search:<query>:<limit>`) ve per-provider rate limiter (`tmdb`) ile quota korunur.
+
+- `search_google_books(query, limit)`
+  - Ne yapar: Google Books (varsa) kullanır; yoksa Open Library'e rağbet eder. Sonuçları uygulama standardına çevirir (`page_count`, `poster`, `title`, `year` vb.).
+  - Neden var: Keşfet ve arama senaryolarında kitaplar için dış kaynak sağlayıcı.
+  - Önemli not: Benzer şekilde cache (`google:search:<query>:<limit>`) ve rate limiter (`google`) kullanır.
+
+- `get_tmdb_movie_details(external_id)`
+  - Ne yapar: Belirtilen TMDb id'si için detay (runtime, poster, title, vb.) çeker, map'leyip döner ve cache'e kaydeder (`tmdb:detail:<external_id>`). Eğer rate limit aşılmışsa None dönebilir.
+  - Neden: Content-detail sayfası DB'de olmayan `mov-...` external_id'ler için canlı detay sağlamak amacıyla.
+
+- `get_book_details(external_id)`
+  - Ne yapar: `book-<id>` için Google Books veya OpenLibrary üzerinden detay getirir; map'ler ve cache'e kaydeder.
+  - Neden: Content-detail sayfası veya canlı kaynak gösterimleri için kitap detayının anlık alınması.
+
+- `_cache_get` / `_cache_set` / `_rate_allow`
+  - Ne yapar: küçük, process-local, TTL bazlı cache ve dakika-temelli sayaç ile rate limit uygular.
+  - Neden: geliştirme ortamında API çağrı sayısını sınırlamak, test/speed stabilitesi sağlamak. (Not: production için Redis gibi merkezi bir cache tercih edilir.)
+
+### 3) API katmanı — nerede ne yapılıyor (`backend/api/__init__.py`)
+- `api/feed`: Kullanıcının takip ettiği kişiler veya genel aktiviteler. Kaynak: DB (Activity). Fallback sample data.
+- `api/explore`: DB öncelikli arama; DB'de sonuç yoksa dış API'lar ile arama yapılır. External ingest opsiyoneldir (ENV: `INGEST_EXTERNAL_RESULTS`).
+- `api/content/<id>`: DB'de varsa persisted detay döner; DB yoksa external_id pattern'lerine göre canlı detay çekilir (`get_tmdb_movie_details` / `get_book_details`) ve frontende tek-seferlik sonuç sağlanır.
+- ratings, reviews, reactions, library, lists, follow endpoints: kullanıcı etkileşimleri ve ilişkisel veritabanı işlemleri (create/update/delete + activity kaydı işlemleri).
+
+### 4) Veritabanı modeli ve ilişkiler (`backend/models/__init__.py`)
+Ana tablolar:
+
+- `User` (users) — temel kullanıcı kaydı, takip ilişkisi (`Follow`), avatar, profil bilgisi.
+- `Follow` (follows) — many-to-many (self-referential) takip tablosu; (follower_id, followed_id) kompozit anahtar.
+- `Content` (contents) — içerik kayıtları: `external_id`, `content_type` (movie/book), `title`, `runtime_minutes`, `page_count`, `cover_url`, `extra_metadata`.
+- `LibraryItem` (library_items) — kullanıcı kütüphanelerine eklenen içerikler (`status`: watched/watchlist/read/reading_list).
+- `Rating` (ratings) — user-content tekil puan (unique constraint user+content).
+- `Review` (reviews) — user-content yorumları; zaman damgaları ve update takibi.
+- `ReviewReaction` (review_reactions) — kullanıcıların review'ler üzerindeki like/dislike tepkileri.
+- `Activity` (activities) — kullanıcı aktivitelerini özetleyen (rating, review, list_add, library_status) kayıtlar. Feed ekranı bu tablodan beslenir.
+
+### 5) Neden böyle bir yapı? (kısa gerekçe)
+- Ayrık komponentler (clients vs api vs models) kodun test edilebilirliğini ve ileride üretime taşımayı kolaylaştırır.
+- DB merkezli model: kalıcı içerikler, kullanıcı etkinlikleri ve ilişkiler izlenebilir olur.
+- Dış kaynaklar için cache & rate limiter (development) ile API maliyeti ve test kararlılığı sağlanır; gerçek üretime taşınırken Redis/Shared rate-limiter tavsiye edilir.
+
+### 6) Test stratejisi
+- `tests/` içinde birim + entegrasyon testleri yer alır: clients mapping, explore ingestion, content-detail live gibi kritik davranışlar doğrulanmıştır.
+- `conftest.py` DB izolasyonu ve seed işlemleri sağlar — testler izole çalışır.
+
+---
+
+Eğer isterseniz, bu bölümden türetilmiş daha ayrıntılı bir `ARCHITECTURE.md` dosyası oluşturabilirim (örneğin ER diyagramı, sequence diagram, nerelerde cache kullanıldığı, ve CI adımları). Bir sonraki adımda bunu genişleteyim mi?
