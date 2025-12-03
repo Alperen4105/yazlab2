@@ -893,6 +893,12 @@ def api_add_list_item(list_id: int):
             try:
                 ext = get_tmdb_movie_details(content_id)
                 if ext:
+                    extra = ext.get("extra") or {}
+                    # normalize common fields
+                    extra["synopsis"] = ext.get("synopsis") or ext.get("overview")
+                    extra["genres"] = ext.get("genres") or extra.get("genres") or []
+                    extra["directors"] = ext.get("directors") or extra.get("directors") or []
+                    extra["cast"] = ext.get("cast") or extra.get("cast") or []
                     content = Content(
                         external_id=ext.get("id"),
                         content_type="movie",
@@ -900,7 +906,7 @@ def api_add_list_item(list_id: int):
                         release_year=int(ext.get("year")) if ext.get("year") else None,
                         cover_url=ext.get("poster"),
                         runtime_minutes=ext.get("runtime_minutes"),
-                        extra_metadata=ext.get("extra"),
+                        extra_metadata=extra,
                     )
                     db.session.add(content)
                     db.session.flush()
@@ -910,6 +916,11 @@ def api_add_list_item(list_id: int):
             try:
                 ext = get_book_details(content_id)
                 if ext:
+                    extra = ext.get("extra") or {}
+                    extra["synopsis"] = ext.get("synopsis") or extra.get("synopsis")
+                    extra["genres"] = ext.get("genres") or extra.get("genres") or []
+                    extra["authors"] = ext.get("authors") or extra.get("authors") or []
+                    extra["publishers"] = ext.get("publishers") or extra.get("publishers") or []
                     content = Content(
                         external_id=ext.get("id"),
                         content_type="book",
@@ -917,7 +928,7 @@ def api_add_list_item(list_id: int):
                         release_year=int(ext.get("year")) if ext.get("year") else None,
                         cover_url=ext.get("poster"),
                         page_count=ext.get("page_count"),
-                        extra_metadata=ext.get("extra"),
+                        extra_metadata=extra,
                     )
                     db.session.add(content)
                     db.session.flush()
@@ -932,6 +943,11 @@ def api_add_list_item(list_id: int):
                 content = None
     if not content:
         return jsonify({"message": "Content not found"}), 404
+
+    # prevent duplicate entries
+    exists = CustomListItem.query.filter_by(list_id=lst.id, content_id=content.id).first()
+    if exists:
+        return jsonify({"message": "already exists"}), 409
 
     cli = CustomListItem(list_id=lst.id, content_id=content.id)
     db.session.add(cli)
