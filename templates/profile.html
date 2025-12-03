@@ -1,4 +1,10 @@
-{% extends "base.html" %} {% block content %} {% if not profile %}
+{% extends "base.html" %} {% block content %} {% with messages =
+get_flashed_messages(with_categories=true) %} {% if messages %} {% for category,
+message in messages %}
+<div class="alert {{ 'success' if category == 'success' else 'error' }}">
+  {{ message }}
+</div>
+{% endfor %} {% endif %} {% endwith %} {% if not profile %}
 <section>
   <h1>Profil bulunamadı</h1>
   <p>Aradığınız kullanıcı mevcut değil.</p>
@@ -19,7 +25,7 @@
     </div>
     <div class="actions">
       {% if current_user and current_user.username == profile.username %}
-      <a class="primary" href="#">Profili Düzenle</a>
+      <button class="primary" onclick="openEditModal()">Profili Düzenle</button>
       <a class="ghost" href="#">Yeni Özel Liste Oluştur</a>
       {% else %} {% if current_user %} {% if is_following %}
       <form
@@ -91,4 +97,86 @@
     {% endfor %}
   </div>
 </section>
-{% endif %} {% endblock %}
+{% endif %}
+
+<!-- Edit Profile Modal -->
+<div id="editProfileModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Profili Düzenle</h2>
+      <button class="modal-close" onclick="closeEditModal()">&times;</button>
+    </div>
+    <form
+      method="post"
+      action="{{ url_for('update_profile', username=profile.username if profile else '') }}"
+      enctype="multipart/form-data"
+    >
+      <div class="form-group">
+        <label for="display_name">Görünen Ad</label>
+        <input
+          type="text"
+          id="display_name"
+          name="display_name"
+          value="{{ profile.name if profile else '' }}"
+        />
+      </div>
+      <div class="form-group">
+        <label for="bio">Biyografi</label>
+        <textarea id="bio" name="bio" placeholder="Kendinizden bahsedin...">
+{{ profile.bio if profile else '' }}</textarea
+        >
+      </div>
+      <div class="form-group">
+        <label for="avatar">Profil Resmi</label>
+        <input type="file" id="avatar" name="avatar" accept="image/*" />
+        {% if profile.avatar %}
+        <p class="muted" style="font-size: 0.875rem; margin-top: 0.5rem">
+          Mevcut resim:
+          <img
+            src="{{ profile.avatar }}"
+            style="
+              width: 50px;
+              height: 50px;
+              border-radius: 8px;
+              vertical-align: middle;
+            "
+          />
+        </p>
+        {% endif %}
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="primary">Kaydet</button>
+        <button type="button" class="ghost" onclick="closeEditModal()">
+          İptal
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function openEditModal() {
+    document.getElementById("editProfileModal").classList.add("active");
+  }
+
+  function closeEditModal() {
+    document.getElementById("editProfileModal").classList.remove("active");
+  }
+
+  // Close modal when clicking outside
+  document
+    .getElementById("editProfileModal")
+    .addEventListener("click", function (e) {
+      if (e.target === this) {
+        closeEditModal();
+      }
+    });
+
+  // Close modal with Escape key
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      closeEditModal();
+    }
+  });
+</script>
+{% endblock %}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, Optional, Tuple
 
 from flask import (
@@ -266,6 +267,107 @@ def profile(username: str):
         activities=payload.get("recent_activities", []),
         is_following=payload.get("is_following", False),
     )
+
+
+@app.route("/profile/<username>/update", methods=["POST"])
+def update_profile(username: str):
+    auth = session.get("auth", {})
+    access = auth.get("access_token")
+    if not access:
+        flash("Lütfen önce giriş yapın.", "warning")
+        return redirect(url_for("login"))
+    
+    # Get form data
+    display_name = request.form.get("display_name", "").strip()
+    bio = request.form.get("bio", "").strip()
+    
+    # Handle file upload
+    avatar_file = request.files.get("avatar")
+    avatar_data = None
+    
+    if avatar_file and avatar_file.filename:
+        import os
+        from werkzeug.utils import secure_filename
+        from PIL import Image
+        import io
+        
+        # Read file
+        file_data = avatar_file.read()
+        
+        # Check file size (limit to 5MB)
+        max_size = 5 * 1024 * 1024  # 5MB
+        if len(file_data) > max_size:
+            flash("Resim çok büyük. Maksimum 5MB olmalı.", "danger")
+            return redirect(url_for("profile", username=username))
+        
+        try:
+            # Open image and resize if needed
+            img = Image.open(io.BytesIO(file_data))
+            
+            # Convert to RGB if needed (for PNG with transparency, etc.)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            
+            # Resize to max 400x400 to reduce file size
+            max_dimension = 400
+            if img.width > max_dimension or img.height > max_dimension:
+                img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
+            
+            # Save to static/uploads directory
+            uploads_dir = os.path.join(app.static_folder, 'uploads', 'avatars')
+            os.makedirs(uploads_dir, exist_ok=True)
+            
+            # Generate unique filename
+            ext = os.path.splitext(avatar_file.filename)[1].lower()
+            if ext not in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+                ext = '.jpg'
+            
+            filename = f"{username}_{int(time.time())}{ext}"
+            filepath = os.path.join(uploads_dir, filename)
+            
+            # Save optimized image
+            img.save(filepath, format='JPEG' if ext in ['.jpg', '.jpeg'] else 'PNG', quality=85, optimize=True)
+            
+            # Store relative URL path
+            avatar_data = f"/static/uploads/avatars/{filename}"
+            app.logger.info(f"Avatar saved to: {avatar_data}")
+            
+        except Exception as e:
+            app.logger.error(f"Error processing image: {e}")
+            flash("Resim işlenirken hata oluştu.", "danger")
+            return redirect(url_for("profile", username=username))
+    
+    update_data = {
+        "display_name": display_name,
+        "bio": bio,
+    }
+    
+    if avatar_data:
+        update_data["avatar_url"] = avatar_data
+    
+    payload, status = api_request(
+        "put",
+        f"/api/profiles/{username}",
+        json=update_data,
+        headers={"Authorization": f"Bearer {access}"},
+    )
+    
+    if status == 200:
+        flash("Profil başarıyla güncellendi!", "success")
+        # Update session user data (but NOT the avatar - it's too large for cookies)
+        if auth.get("user"):
+            auth["user"]["display_name"] = display_name
+            auth["user"]["bio"] = bio
+            # Don't store avatar in session - it's too large
+            session["auth"] = auth
+    else:
+        flash(payload.get("message", "Profil güncellenemedi."), "danger")
+    
+    return redirect(url_for("profile", username=username))
 
 
 

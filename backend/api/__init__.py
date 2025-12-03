@@ -910,6 +910,41 @@ def api_profile(username: str):
     )
 
 
+@api_bp.put("/profiles/<username>")
+@jwt_required()
+def api_update_profile(username: str):
+    """Update user profile (bio, display_name, avatar_url)"""
+    identity = get_jwt_identity()
+    try:
+        identity = int(identity)
+    except Exception:
+        pass
+    
+    user = User.query.get(identity)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    
+    # Verify user is updating their own profile
+    if user.username != username:
+        return jsonify({"message": "Forbidden"}), 403
+    
+    data = request.get_json() or {}
+    
+    # Update allowed fields
+    if "bio" in data:
+        user.bio = data["bio"]
+    if "display_name" in data:
+        user.display_name = data["display_name"]
+    if "avatar_url" in data:
+        user.avatar_url = data["avatar_url"]
+        from flask import current_app
+        current_app.logger.info(f"Updating avatar for {username}: {data['avatar_url']}")
+    
+    db.session.commit()
+    
+    return jsonify({"message": "Profile updated", "user": user.to_dict()})
+
+
 @api_bp.post("/auth/login")
 def api_login():
     data = request.get_json() or {}
