@@ -21,7 +21,7 @@
         activity.user.name }}, "{{ activity.list_name }}" listesine yeni bir
         içerik ekledi. {% else %}{{ activity.user.name }} bir içerikle
         etkileşimde bulundu. {% endif %}
-        <span class="timestamp">{{ activity.timestamp }}</span>
+        <span class="timestamp">{{ activity.humanized_timestamp or activity.timestamp }}</span>
       </p>
     </div>
   </header>
@@ -37,10 +37,14 @@
       <h3>{{ activity.content.title }} ({{ activity.content.year }})</h3>
       {% if activity.type == "rating" %}
       <p class="score">Verilen puan: <span>{{ activity.score }}/10</span></p>
+      <div class="stars" aria-label="puan">
+        {% set s = activity.score or 0 %}
+        {% for i in range(1,11) %}
+          <span class="star {{ 'on' if i <= s else 'off' }}">★</span>
+        {% endfor %}
+      </div>
       {% elif activity.type == "review" %}
-      <p class="excerpt">
-        {{ (activity.comment or '') | truncate(180, True) }}
-      </p>
+      <p class="excerpt">{{ (activity.comment or '') | truncate(180, True) }}</p>
       <a
         class="read-more"
         href="{{ url_for('content_detail', content_type=activity.content.kind, content_id=activity.content.id) }}"

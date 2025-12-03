@@ -4,8 +4,7 @@
     <p class="eyebrow">Keşfet</p>
     <h1>Film ve kitap arşivini genişlet</h1>
     <p>
-      Vitrin modülleri TMDb ve Google Books API'lerinden gelecek gerçek veriler
-      için hazırlandı.
+      Binlerce film ve kitap arasından istediğini bul. Filtrele, keşfet, listene ekle.
     </p>
   </div>
   <form class="search-form" method="get">
@@ -19,12 +18,45 @@
   </form>
 </section>
 
+<section class="filters-panel">
+  <form method="get" class="filters-form">
+    <input type="hidden" name="q" value="{{ query }}" />
+    
+    <div class="filter-group">
+      <label for="type">Tür</label>
+      <select name="type" id="type">
+        <option value="">Tümü</option>
+        <option value="film" {{ 'selected' if request.args.get('type') == 'film' }}>Filmler</option>
+        <option value="book" {{ 'selected' if request.args.get('type') == 'book' }}>Kitaplar</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label for="year_min">Yıl (Min)</label>
+      <input type="number" name="year_min" id="year_min" value="{{ request.args.get('year_min', '') }}" placeholder="1990" min="1900" max="2025" />
+    </div>
+
+    <div class="filter-group">
+      <label for="year_max">Yıl (Max)</label>
+      <input type="number" name="year_max" id="year_max" value="{{ request.args.get('year_max', '') }}" placeholder="2025" min="1900" max="2025" />
+    </div>
+
+    <div class="filter-group">
+      <label for="score_min">Min. Puan</label>
+      <input type="number" name="score_min" id="score_min" value="{{ request.args.get('score_min', '') }}" placeholder="7.0" min="0" max="10" step="0.1" />
+    </div>
+
+    <button type="submit" class="filter-btn">Filtrele</button>
+    <a href="{{ url_for('explore') }}" class="filter-reset">Temizle</a>
+  </form>
+</section>
+
 {% for section, items in sections.items() %}
 <section class="carousel">
   <div class="section-heading">
     <div>
-      <p class="eyebrow">{{ section | replace("_", " ") | title }}</p>
-      <h2>{{ items|length }} içerik</h2>
+      <h2>{{ section }}</h2>
+      <p class="muted">{{ items|length }} içerik</p>
     </div>
   </div>
   <div class="card-row">
@@ -34,26 +66,24 @@
         src="{{ item.poster or url_for('static', filename='placeholder-content.svg') }}"
         alt="{{ item.title }}"
       />
-      <div>
+      <div class="card-info">
         {% if not item.persisted %}
         <span class="badge external"
           >Canlı — {{ item.source | replace('_', ' ') | title }}</span
         >
         {% endif %}
-        <p class="muted">{{ 'FİLM' if item.kind == 'film' else 'KİTAP' }}</p>
+        <p class="content-type-badge">{{ 'FİLM' if item.kind == 'film' else 'KİTAP' }}</p>
         <h3>{{ item.title }}</h3>
+        {% if item.year %}
+        <p class="muted small">{{ item.year }}</p>
+        {% endif %}
         {% if item.score %}
-        <p class="score">{{ item.score }}/10 ortalama</p>
-        {% elif item.comments %}
-        <p class="score">{{ item.comments }} yorum</p>
-        {% endif %} {% if item.runtime_minutes %}
-        <p class="muted small">Süre: {{ item.runtime_minutes }} dk</p>
-        {% elif item.page_count %}
-        <p class="muted small">Sayfa: {{ item.page_count }}</p>
+        <p class="score">⭐ {{ item.score }}/10</p>
         {% endif %}
         <a
+          class="detail-link"
           href="{{ url_for('content_detail', content_type=item.kind, content_id=item.id) }}"
-          >Detaylar</a
+          >Detaylar →</a
         >
       </div>
     </article>
@@ -61,5 +91,7 @@
   </div>
 </section>
 {% else %}
-<p class="muted">Sonuç bulunamadı.</p>
+<section class="empty-state">
+  <p class="muted">{% if query %}Arama için sonuç bulunamadı.{% else %}Henüz içerik yok. Arama yaparak ekleyebilirsin.{% endif %}</p>
+</section>
 {% endfor %} {% endblock %}

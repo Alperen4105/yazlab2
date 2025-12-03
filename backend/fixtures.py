@@ -44,14 +44,15 @@ def _ensure_content(item: Dict):
     # Attempt to match by title + kind
     title = item.get("title")
     kind = item.get("kind")
+    content_type = "movie" if kind == "film" else "book"
     existing = (
-        Content.query.filter_by(title=title, content_type=("movie" if kind == "film" else "book")).first()
+        Content.query.filter_by(title=title, content_type=content_type).first()
     )
     if existing:
         return existing
     c = Content(
         external_id=item.get("id"),
-        content_type=("movie" if kind == "film" else "book"),
+        content_type=content_type,
         title=title,
         synopsis=item.get("synopsis"),
         release_year=item.get("year"),
@@ -91,14 +92,23 @@ def seed_from_sample_data():
         udata = a.get("user", {})
         user = _ensure_user({"username": udata.get("username"), "name": udata.get("name"), "avatar": udata.get("avatar")})
 
-        act = Activity(
+        # Check if this activity already exists
+        existing_act = Activity.query.filter_by(
             user_id=user.id,
-            activity_type=("rating" if a.get("type") == "rating" else a.get("type")),
-            related_id=(content.id if content else None),
-            extra_metadata={"score": a.get("score"), "comment": a.get("comment"), "likes": a.get("likes", 0)},
-            created_at=datetime.utcnow(),
-        )
-        db.session.add(act)
+            activity_type=a.get("type"),
+            related_id=(content.id if content else None)
+        ).first()
+        
+        if not existing_act:
+            act = Activity(
+                user_id=user.id,
+                activity_type=a.get("type"),
+                related_id=(content.id if content else None),
+                extra_metadata={"score": a.get("score"), "comment": a.get("comment"), "likes": a.get("likes", 0), "comments": a.get("comments", 0)},
+                created_at=datetime.utcnow(),
+            )
+            db.session.add(act)
+        
         # Also create corresponding Rating or Review records where applicable
         if a.get("type") == "rating" and a.get("score") and content:
             # add a rating if not already present

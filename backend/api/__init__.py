@@ -28,7 +28,7 @@ from backend.clients import (
     get_tmdb_movie_details,
     get_book_details,
 )
-from datetime import timezone
+from datetime import timezone, datetime
 import os
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -45,6 +45,26 @@ def _paginate(items, page: int, per_page: int):
         "total": len(items),
     }
 
+
+def _humanize_ts(dt):
+    try:
+        if not dt:
+            return None
+        now = datetime.now(dt.tzinfo) if hasattr(dt, 'tzinfo') and dt.tzinfo else datetime.now()
+        diff = now - dt
+        secs = int(diff.total_seconds())
+        if secs < 60:
+            return f"{secs} sn önce"
+        mins = secs // 60
+        if mins < 60:
+            return f"{mins} dk önce"
+        hours = mins // 60
+        if hours < 24:
+            return f"{hours} saat önce"
+        days = hours // 24
+        return f"{days} gün önce"
+    except Exception:
+        return None
 
 
 @api_bp.get("/feed")
@@ -95,6 +115,7 @@ def api_feed():
             "score": None,
             "comment": None,
             "timestamp": a.created_at.isoformat() if a.created_at else None,
+            "humanized_timestamp": _humanize_ts(a.created_at) if a.created_at else None,
             "likes": a.extra_metadata.get("likes") if a.extra_metadata else 0,
             "comments": a.extra_metadata.get("comments") if a.extra_metadata else 0,
         }
@@ -111,63 +132,108 @@ def api_feed():
                 item["comment"] = a.extra_metadata.get("comment")
         items.append(item)
 
-    payload = {
-        "items": items,
-        "page": page,
-        "per_page": per_page,
-        "has_more": (start + len(items)) < total,
-        "total": total,
-    }
     # If DB is empty fallback to sample data
     if total == 0:
         payload = _paginate(FEED_ACTIVITIES, page, per_page)
-    payload["featured_lists"] = FEATURED_LISTS
-    payload["featured_users"] = FEATURED_USERS
+        payload["featured_lists"] = FEATURED_LISTS
+        payload["featured_users"] = FEATURED_USERS
+    else:
+        payload = {
+            "items": items,
+            "page": page,
+            "per_page": per_page,
+            "has_more": (start + per_page) < total,
+            "total": total,
+            "featured_lists": FEATURED_LISTS,
+            "featured_users": FEATURED_USERS,
+        }
     return jsonify(payload)
 
 
 @api_bp.get("/explore")
 def api_explore():
     query = request.args.get("q", "").lower()
+    genre = request.args.get("genre", "").strip()
+    year_min = request.args.get("year_min", "").strip()
+    year_max = request.args.get("year_max", "").strip()
+    score_min = request.args.get("score_min", "").strip()
+    content_type = request.args.get("type", "").strip()  # 'film' or 'book'
+    
     results = []
     sections = {}
 
     # Prefer DB content; fallback to POPULAR_CONTENT when DB empty
     db_count = Content.query.count()
     if db_count:
-        # Fetch all contents and filter in Python (sufficient for small dev DB)
+        # Fetch all contents and filter
         all_contents = Content.query.all()
         for c in all_contents:
             title = (c.title or "").lower()
             if query and query not in title:
                 continue
+            
+            # Apply content type filter
+            item_kind = "film" if c.content_type == "movie" else "book"
+            if content_type and content_type != item_kind:
+                continue
+            
+            # Apply year filter
+            if year_min and c.release_year and c.release_year < int(year_min):
+                continue
+            if year_max and c.release_year and c.release_year > int(year_max):
+                continue
+            
             # compute average score from ratings
             avg = None
             if hasattr(c, "ratings"):
                 scores = [r.score for r in c.ratings]
                 if scores:
                     avg = sum(scores) / len(scores)
+            
+            # Apply score filter
+            if score_min and (avg is None or avg < float(score_min)):
+                continue
 
             item = {
                 "id": f"content-{c.id}",
                 "title": c.title,
                 "poster": c.cover_url,
                 "score": round(avg, 1) if avg is not None else None,
-                "kind": "film" if c.content_type == "movie" else "book",
+                "year": c.release_year,
+                "kind": item_kind,
                 "persisted": True,
                 "source": "local",
             }
             results.append(item)
 
-        # if the DB returned results, split by type
+        # if the DB returned results, create sections
         if results:
             films = [r for r in results if r["kind"] == "film"]
             books = [r for r in results if r["kind"] == "book"]
-            sections = {}
-            if films:
-                sections["Filmler"] = films
-            if books:
-                sections["Kitaplar"] = books
+            
+            # Create showcase sections if no specific query
+            if not query:
+                # Top rated (score >= 8)
+                top_rated = sorted([r for r in results if r.get("score") and r["score"] >= 8], key=lambda x: x.get("score", 0), reverse=True)[:10]
+                # Most recent
+                recent = sorted([r for r in results if r.get("year")], key=lambda x: x.get("year", 0), reverse=True)[:10]
+                
+                sections = {}
+                if top_rated:
+                    sections["En Y\u00fcksek Puanl\u0131"] = top_rated
+                if recent:
+                    sections["Yeni Eklenenler"] = recent
+                if films:
+                    sections["Filmler"] = films[:10]
+                if books:
+                    sections["Kitaplar"] = books[:10]
+            else:
+                sections = {}
+                if films:
+                    sections["Filmler"] = films
+                if books:
+                    sections["Kitaplar"] = books
+            
             return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
 
         # if the DB returned nothing for the query, try external search
@@ -306,6 +372,58 @@ def api_explore():
         results = [item for items in POPULAR_CONTENT.values() for item in items]
 
     return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
+
+
+@api_bp.get("/admin/db-summary")
+def api_admin_db_summary():
+    """Return a quick database summary. Protected via simple header key.
+
+    Send header `X-Admin-Key: <key>` where key equals env `ADMIN_KEY`.
+    """
+    admin_key = os.getenv("ADMIN_KEY")
+    provided = request.headers.get("X-Admin-Key")
+    if admin_key and provided != admin_key:
+        return jsonify({"message": "forbidden"}), 403
+
+    users = User.query.count()
+    contents = Content.query.count()
+    ratings = Rating.query.count()
+    reviews = Review.query.count()
+    reactions = ReviewReaction.query.count()
+    lists = CustomList.query.count()
+    list_items = CustomListItem.query.count()
+    follows = Follow.query.count()
+    activities = Activity.query.count()
+
+    # sample few rows for visibility
+    sample_users = [u.to_dict() for u in User.query.limit(3).all()]
+    sample_contents = [
+        {
+            "id": c.id,
+            "title": c.title,
+            "type": c.content_type,
+            "year": c.release_year,
+        }
+        for c in Content.query.limit(3).all()
+    ]
+
+    return jsonify({
+        "counts": {
+            "users": users,
+            "contents": contents,
+            "ratings": ratings,
+            "reviews": reviews,
+            "reactions": reactions,
+            "lists": lists,
+            "list_items": list_items,
+            "follows": follows,
+            "activities": activities,
+        },
+        "samples": {
+            "users": sample_users,
+            "contents": sample_contents,
+        },
+    })
 
 
 @api_bp.get("/content/<content_id>")
