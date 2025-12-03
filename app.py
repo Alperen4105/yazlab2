@@ -47,6 +47,7 @@ def inject_globals():
     return {
         "platform_title": "Sosyal Kütüphane",
         "current_user": auth.get("user"),
+        "access_token": auth.get("access_token"),
     }
 
 
@@ -149,7 +150,7 @@ def explore():
     )
 
 
-@app.route("/content/<content_type>/<content_id>")
+@app.route("/content/<content_type>/<content_id>", methods=["GET", "POST"])
 def content_detail(content_type: str, content_id: str):
     if request.method == "POST":
         # handle new comment or rating from frontend form
@@ -218,6 +219,14 @@ def content_detail(content_type: str, content_id: str):
                 json={"score": score},
                 headers={"Authorization": f"Bearer {access}"},
             )
+        elif request.form.get("add_to_list_id"):
+            list_id = request.form.get("add_to_list_id")
+            payload, status = api_request(
+                "post",
+                f"/api/lists/{int(list_id)}/items",
+                json={"content_id": content_id},
+                headers={"Authorization": f"Bearer {access}"},
+            )
         else:
             body = request.form.get("body")
             payload, status = api_request(
@@ -239,10 +248,24 @@ def content_detail(content_type: str, content_id: str):
         return render_template("content_detail.html", content=None), 404
     if status != 200:
         abort(status)
+    # Fetch user's lists for add-to-list UI
+    lists = []
+    auth = session.get("auth", {})
+    current = auth.get("user")
+    access = auth.get("access_token")
+    if current and access:
+        lists_payload, ls_status = api_request(
+            "get",
+            f"/api/users/{current.get('username')}/lists",
+            headers={"Authorization": f"Bearer {access}"},
+        )
+        if ls_status == 200:
+            lists = lists_payload.get("lists", [])
     return render_template(
         "content_detail.html",
         content=payload.get("content"),
         comments=payload.get("comments", []),
+        user_lists=lists,
     )
 
 

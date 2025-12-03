@@ -197,24 +197,38 @@ message in messages %}
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        {% if current_user and current_user.access_token %}
-        'Authorization': 'Bearer {{ current_user.access_token }}'
+        {% if access_token %}
+        'Authorization': 'Bearer {{ access_token }}'
         {% endif %}
       },
       body: JSON.stringify({ title })
-    }).then(r => r.json()).then(d => {
+    }).then(async r => {
+      if (!r.ok) {
+        const text = await r.text();
+        throw new Error(`Hata ${r.status}: ${text}`);
+      }
+      return r.json();
+    }).then(d => {
       if (d.id) {
         loadLists();
         alert('Liste oluşturuldu');
       } else {
         alert(d.message || 'Oluşturulamadı');
       }
+    }).catch(err => {
+      alert(err.message);
     });
   }
 
   function loadLists() {
     fetch('/api/users/{{ profile.username }}/lists')
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) {
+          const text = await r.text();
+          throw new Error(`Hata ${r.status}: ${text}`);
+        }
+        return r.json();
+      })
       .then(data => {
         const grid = document.getElementById('listsGrid');
         grid.innerHTML = '';
@@ -230,6 +244,10 @@ message in messages %}
             </article>
           `);
         });
+      })
+      .catch(err => {
+        const grid = document.getElementById('listsGrid');
+        grid.innerHTML = `<p class="muted">Listeler yüklenemedi: ${err.message}</p>`;
       });
   }
 

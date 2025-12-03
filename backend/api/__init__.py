@@ -886,7 +886,50 @@ def api_add_list_item(list_id: int):
     if lst.user_id != user.id:
         return jsonify({"message": "forbidden"}), 403
 
-    content = Content.query.filter_by(external_id=content_id).first() or (Content.query.get(int(content_id.split('content-')[-1])) if content_id.startswith('content-') else None)
+    content = Content.query.filter_by(external_id=content_id).first() or (Content.query.get(int(content_id.split('content-')[-1])) if isinstance(content_id, str) and content_id.startswith('content-') else None)
+    if not content:
+        # Try to ingest from external sources if given external id (TMDb/Books)
+        if isinstance(content_id, str) and content_id.startswith("mov-"):
+            try:
+                ext = get_tmdb_movie_details(content_id)
+                if ext:
+                    content = Content(
+                        external_id=ext.get("id"),
+                        content_type="movie",
+                        title=ext.get("title") or "Untitled",
+                        release_year=int(ext.get("year")) if ext.get("year") else None,
+                        cover_url=ext.get("poster"),
+                        runtime_minutes=ext.get("runtime_minutes"),
+                        extra_metadata=ext.get("extra"),
+                    )
+                    db.session.add(content)
+                    db.session.flush()
+            except Exception:
+                content = None
+        elif isinstance(content_id, str) and content_id.startswith("book-"):
+            try:
+                ext = get_book_details(content_id)
+                if ext:
+                    content = Content(
+                        external_id=ext.get("id"),
+                        content_type="book",
+                        title=ext.get("title") or "Untitled",
+                        release_year=int(ext.get("year")) if ext.get("year") else None,
+                        cover_url=ext.get("poster"),
+                        page_count=ext.get("page_count"),
+                        extra_metadata=ext.get("extra"),
+                    )
+                    db.session.add(content)
+                    db.session.flush()
+            except Exception:
+                content = None
+        else:
+            # numeric id fallback
+            try:
+                pk = int(content_id)
+                content = Content.query.get(pk)
+            except Exception:
+                content = None
     if not content:
         return jsonify({"message": "Content not found"}), 404
 
@@ -1160,7 +1203,14 @@ def api_get_user_lists(username: str):
     user = User.query.filter_by(username=username).first()
     if not user:
         return jsonify({"message": "User not found"}), 404
-    lists = CustomList.query.filter_by(owner_id=user.id).order_by(CustomList.created_at.desc()).all()
+    # Support both legacy field names (user_id) and current (owner_id)
+    try:
+        lists = CustomList.query.filter_by(owner_id=user.id).order_by(CustomList.created_at.desc()).all()
+        if len(lists) == 0:
+            # fallback
+            lists = CustomList.query.filter_by(user_id=user.id).order_by(CustomList.created_at.desc()).all()
+    except Exception:
+        lists = CustomList.query.filter_by(user_id=user.id).order_by(CustomList.created_at.desc()).all()
     out = []
     for lst in lists:
         items = CustomListItem.query.filter_by(list_id=lst.id).limit(4).all()
