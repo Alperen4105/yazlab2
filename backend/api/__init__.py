@@ -506,6 +506,34 @@ def api_content_detail(content_id: str):
     scores = [r.score for r in c.ratings]
     avg = round(sum(scores) / len(scores), 1) if scores else None
     total_votes = len(scores)
+    
+    # Extract rich metadata
+    extra = c.extra_metadata or {}
+    genres = extra.get('genres', [])
+    directors = extra.get('directors', [])
+    cast = extra.get('cast', [])
+    authors = extra.get('authors', [])
+    publishers = extra.get('publishers', [])
+    
+    content_payload = {
+        "id": f"content-{c.id}",
+        "title": c.title,
+        "year": c.release_year,
+        "poster": c.cover_url,
+        "kind": "film" if c.content_type == "movie" else "book",
+        "platform_score": avg,
+        "total_votes": total_votes,
+        "synopsis": c.synopsis,
+        "genres": genres,
+        "directors": directors,
+        "cast": cast[:5] if cast else [],  # Top 5 cast
+        "authors": authors,
+        "publishers": publishers,
+        "meta": {
+            "runtime_minutes": c.runtime_minutes,
+            "page_count": c.page_count,
+        },
+    }
 
     # collect reviews
     comments = []
@@ -552,6 +580,12 @@ def api_content_detail(content_id: str):
         "kind": "film" if c.content_type == "movie" else "book",
         "platform_score": avg,
         "total_votes": total_votes,
+        "synopsis": c.synopsis,
+        "genres": genres,
+        "directors": directors,
+        "cast": cast[:5] if cast else [],
+        "authors": authors,
+        "publishers": publishers,
         "meta": {
             "runtime_minutes": c.runtime_minutes,
             "page_count": c.page_count,

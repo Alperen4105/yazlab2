@@ -10,16 +10,64 @@
     src="{{ content.poster or url_for('static', filename='placeholder-content.svg') }}"
     alt="{{ content.title }}"
   />
-  <div>
+  <div class="content-info">
     <p class="eyebrow">{{ content.kind | upper }}</p>
     <h1>{{ content.title }}</h1>
-    {% if content.year %}
-    <p class="muted">{{ content.year }}</p>
-    {% endif %} {% if content.meta and content.meta.runtime_minutes %}
-    <p class="muted">Süre: {{ content.meta.runtime_minutes }} dk</p>
-    {% endif %} {% if content.meta and content.meta.page_count %}
-    <p class="muted">Sayfa sayısı: {{ content.meta.page_count }}</p>
+    
+    <div class="content-meta">
+      {% if content.year %}
+      <span class="meta-item">📅 {{ content.year }}</span>
+      {% endif %}
+      {% if content.meta and content.meta.runtime_minutes %}
+      <span class="meta-item">⏱️ {{ content.meta.runtime_minutes }} dk</span>
+      {% endif %}
+      {% if content.meta and content.meta.page_count %}
+      <span class="meta-item">📖 {{ content.meta.page_count }} sayfa</span>
+      {% endif %}
+      {% if content.platform_score %}
+      <span class="meta-item score-badge">⭐ {{ content.platform_score }}/10 ({{ content.total_votes }} oy)</span>
+      {% endif %}
+    </div>
+
+    {% if content.genres %}
+    <div class="genres">
+      {% for genre in content.genres %}
+      <span class="genre-badge">{{ genre }}</span>
+      {% endfor %}
+    </div>
     {% endif %}
+
+    {% if content.synopsis %}
+    <div class="synopsis">
+      <h3>Özet</h3>
+      <p>{{ content.synopsis }}</p>
+    </div>
+    {% endif %}
+
+    {% if content.directors %}
+    <div class="credits">
+      <strong>Yönetmen:</strong> {{ content.directors | join(', ') }}
+    </div>
+    {% endif %}
+
+    {% if content.cast %}
+    <div class="credits">
+      <strong>Oyuncular:</strong> {{ content.cast | join(', ') }}
+    </div>
+    {% endif %}
+
+    {% if content.authors %}
+    <div class="credits">
+      <strong>Yazar:</strong> {{ content.authors | join(', ') }}
+    </div>
+    {% endif %}
+
+    {% if content.publishers %}
+    <div class="credits">
+      <strong>Yayınevi:</strong> {{ content.publishers | join(', ') }}
+    </div>
+    {% endif %}
+
     <div class="actions">
       {% if current_user %}
       <form method="post" style="display: inline-block; margin-right: 6px">

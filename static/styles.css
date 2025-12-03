@@ -524,6 +524,82 @@ button {
 }
 
 .content-hero img {
+
+  .content-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .content-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    align-items: center;
+  }
+
+  .meta-item {
+    font-size: 0.9rem;
+    color: #64748b;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .meta-item.score-badge {
+    color: #f59e0b;
+    font-weight: 600;
+  }
+
+  .genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .genre-badge {
+    display: inline-block;
+    padding: 0.3rem 0.8rem;
+    background: #eef2ff;
+    color: #4338ca;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .synopsis {
+    margin: 0.5rem 0;
+  }
+
+  .synopsis h3 {
+    font-size: 1rem;
+    margin: 0 0 0.5rem 0;
+    color: #0f172a;
+  }
+
+  .synopsis p {
+    color: #475569;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .credits {
+    font-size: 0.9rem;
+    color: #475569;
+    margin: 0.3rem 0;
+  }
+
+  .credits strong {
+    color: #0f172a;
+    margin-right: 0.3rem;
+  }
+
+  .actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
   width: 100%;
   border-radius: 20px;
 }
