@@ -23,7 +23,11 @@
         <nav class="nav-links">
           <a href="{{ url_for('feed') }}">Akış</a>
           <a href="{{ url_for('explore') }}">Keşfet</a>
-          <a href="{{ url_for('profile', username='elifkara') }}">Profil</a>
+          {% if current_user %}
+            <a href="{{ url_for('profile', username=current_user.username) }}">Profilim</a>
+          {% else %}
+            <a href="{{ url_for('login') }}">Profil</a>
+          {% endif %}
         </nav>
         <div class="nav-actions">
           {% if current_user %}

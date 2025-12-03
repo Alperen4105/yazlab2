@@ -26,7 +26,7 @@ message in messages %}
     <div class="actions">
       {% if current_user and current_user.username == profile.username %}
       <button class="primary" onclick="openEditModal()">Profili Düzenle</button>
-      <a class="ghost" href="#">Yeni Özel Liste Oluştur</a>
+      <button class="ghost" onclick="openListModal()">Yeni Özel Liste Oluştur</button>
       {% else %} {% if current_user %} {% if is_following %}
       <form
         method="post"
@@ -50,6 +50,16 @@ message in messages %}
       {% endif %} {% endif %}
     </div>
   </div>
+</section>
+
+<section class="custom-lists">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Özel Listeler</p>
+      <h2>{{ profile.name }}'in listeleri</h2>
+    </div>
+  </div>
+  <div id="listsGrid" class="tab-grid"></div>
 </section>
 
 <section class="library-tabs">
@@ -178,5 +188,51 @@ message in messages %}
       closeEditModal();
     }
   });
+
+  // List create modal
+  function openListModal() {
+    const title = prompt("Liste başlığı:");
+    if (!title) return;
+    fetch('/api/lists', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        {% if current_user and current_user.access_token %}
+        'Authorization': 'Bearer {{ current_user.access_token }}'
+        {% endif %}
+      },
+      body: JSON.stringify({ title })
+    }).then(r => r.json()).then(d => {
+      if (d.id) {
+        loadLists();
+        alert('Liste oluşturuldu');
+      } else {
+        alert(d.message || 'Oluşturulamadı');
+      }
+    });
+  }
+
+  function loadLists() {
+    fetch('/api/users/{{ profile.username }}/lists')
+      .then(r => r.json())
+      .then(data => {
+        const grid = document.getElementById('listsGrid');
+        grid.innerHTML = '';
+        (data.lists || []).forEach(lst => {
+          const items = (lst.preview || []).map(it => `
+            <img src="${it.poster || '/static/placeholder-content.svg'}" alt="${it.title}" style="width:56px;height:84px;border-radius:8px;object-fit:cover" />
+          `).join('');
+          grid.insertAdjacentHTML('beforeend', `
+            <article>
+              <h3>${lst.title}</h3>
+              <div style="display:flex;gap:0.5rem;">${items}</div>
+              <p class="muted" style="margin-top:0.5rem">${lst.items_count} içerik</p>
+            </article>
+          `);
+        });
+      });
+  }
+
+  loadLists();
 </script>
 {% endblock %}

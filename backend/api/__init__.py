@@ -1153,3 +1153,30 @@ def api_refresh():
     identity = get_jwt_identity()
     return jsonify({"access_token": create_access_token(identity=identity)})
 
+
+# Custom Lists API
+@api_bp.get("/users/<username>/lists")
+def api_get_user_lists(username: str):
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    lists = CustomList.query.filter_by(owner_id=user.id).order_by(CustomList.created_at.desc()).all()
+    out = []
+    for lst in lists:
+        items = CustomListItem.query.filter_by(list_id=lst.id).limit(4).all()
+        out.append({
+            "id": lst.id,
+            "title": lst.title,
+            "items_count": CustomListItem.query.filter_by(list_id=lst.id).count(),
+            "preview": [
+                {
+                    "title": it.content.title,
+                    "poster": it.content.cover_url,
+                    "id": f"content-{it.content.id}",
+                } for it in items
+            ],
+        })
+    return jsonify({"lists": out})
+
+
+
