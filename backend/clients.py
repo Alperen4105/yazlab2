@@ -97,10 +97,16 @@ def search_tmdb_movies(query: str, limit: int = 10) -> List[Dict]:
     if not _rate_allow("tmdb"):
         return []
     params = {"query": query, "page": 1}
-    r = requests.get(TMDB_SEARCH_URL, params={**params, "api_key": local_key}, timeout=5)
-    if r.status_code != 200:
+    try:
+        r = requests.get(TMDB_SEARCH_URL, params={**params, "api_key": local_key}, timeout=5)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+    except Exception as e:
+        # Connection error, timeout, or JSON parse error — return empty list gracefully
+        import sys
+        print(f"[TMDb Search Error] {type(e).__name__}: {e}", file=sys.stderr)
         return []
-    data = r.json()
     results = []
     for item in data.get("results", [])[:limit]:
         mapped = {
@@ -143,38 +149,54 @@ def search_google_books(query: str, limit: int = 10) -> List[Dict]:
         if not _rate_allow("google"):
             return []
         params = {"q": query, "maxResults": limit}
-        r = requests.get(GOOGLE_BOOKS_URL, params={**params, "key": local_gkey}, timeout=5)
-        if r.status_code != 200:
-            return []
-        data = r.json()
-        out = []
-        for item in data.get("items", [])[:limit]:
-            vi = item.get("volumeInfo", {})
-            external_id = item.get("id")
-            out.append(
-                {
-                    "id": f"book-{external_id}",
-                    "external_id": f"book-{external_id}",
-                    "title": vi.get("title"),
-                    "year": vi.get("publishedDate", "")[:4] if vi.get("publishedDate") else None,
-                    "poster": vi.get("imageLinks", {}).get("thumbnail"),
-                    "kind": "book",
-                    "extra": vi,
-                    "page_count": vi.get("pageCount"),
-                }
-            )
-        # store the search results in cache
-        _cache_set(cache_key, out)
-        return out
+        try:
+            r = requests.get(GOOGLE_BOOKS_URL, params={**params, "key": local_gkey}, timeout=5)
+            if r.status_code != 200:
+                return []
+            data = r.json()
+        except Exception as e:
+            # Connection error, timeout, or JSON parse error — fall through to Open Library
+            import sys
+            print(f"[Google Books Search Error] {type(e).__name__}: {e}", file=sys.stderr)
+            # fall through to Open Library fallback
+            data = None
+        
+        if data:
+            out = []
+            for item in data.get("items", [])[:limit]:
+                vi = item.get("volumeInfo", {})
+                external_id = item.get("id")
+                out.append(
+                    {
+                        "id": f"book-{external_id}",
+                        "external_id": f"book-{external_id}",
+                        "title": vi.get("title"),
+                        "year": vi.get("publishedDate", "")[:4] if vi.get("publishedDate") else None,
+                        "poster": vi.get("imageLinks", {}).get("thumbnail"),
+                        "kind": "book",
+                        "extra": vi,
+                        "page_count": vi.get("pageCount"),
+                    }
+                )
+            # store the search results in cache
+            _cache_set(cache_key, out)
+            return out
 
     # fallback: Open Library
     params = {"q": query, "limit": limit}
     if not _HAS_REQUESTS:
         return []
-    r = requests.get(OPENLIB_SEARCH_URL, params=params, timeout=5)
-    if r.status_code != 200:
+    try:
+        r = requests.get(OPENLIB_SEARCH_URL, params=params, timeout=5)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+    except Exception as e:
+        # Connection error, timeout, or JSON parse error — return empty list gracefully
+        import sys
+        print(f"[OpenLibrary Search Error] {type(e).__name__}: {e}", file=sys.stderr)
         return []
-    data = r.json()
+    
     out = []
     for item in data.get("docs", [])[:limit]:
         ext_id = item.get("key")
