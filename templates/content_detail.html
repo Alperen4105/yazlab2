@@ -112,36 +112,43 @@
       <p class="eyebrow">Yorumlar</p>
       <h2>Topluluk geri bildirimleri</h2>
     </div>
-    {% if current_user %}
-    <form
-      method="post"
-      class="comment-form"
-      style="display: inline-block; margin-left: 1rem"
-    >
+  </div>
+
+  {% if current_user %}
+  <div class="comment-input-section">
+    <form method="post" class="comment-form">
       <textarea
         name="body"
         placeholder="Yorumunuzu yazın..."
         required
-        rows="2"
-        style="vertical-align: middle"
+        rows="3"
       ></textarea>
-      <button type="submit" class="primary">Gönder</button>
+      <button type="submit" class="primary">Yorum Gönder</button>
     </form>
-    <form
-      method="post"
-      class="score-form"
-      style="display: inline-block; margin-left: 1rem"
-    >
-      <label style="margin-right: 6px">Puan:</label>
-      <input type="number" min="1" max="10" name="score" style="width: 60px" />
-      <button type="submit" class="ghost">Puanla</button>
+
+    <form method="post" class="score-form">
+      <div class="score-input-group">
+        <label>Puan Verin:</label>
+        <input
+          type="number"
+          min="1"
+          max="10"
+          name="score"
+          placeholder="1-10"
+          required
+        />
+        <button type="submit" class="ghost">Puanla</button>
+      </div>
     </form>
-    {% else %}
-    <a class="ghost" href="{{ url_for('login') }}"
+  </div>
+  {% else %}
+  <div class="comment-login-prompt">
+    <a class="primary" href="{{ url_for('login') }}"
       >Giriş yaparak yorum yazabilirsiniz</a
     >
-    {% endif %}
   </div>
+  {% endif %}
+
   <ul>
     {% for item in comments %}
     <li>
@@ -149,38 +156,61 @@
         src="{{ item.avatar or url_for('static', filename='default-avatar.svg') }}"
         alt="{{ item.user }}"
       />
-      <div>
-        <strong>{{ item.user }}</strong>
-        <span class="timestamp">{{ item.timestamp }}</span>
-        <p>{{ item.text }}</p>
+      <div class="comment-content">
+        <div class="comment-header">
+          <strong>{{ item.user }}</strong>
+          <span class="timestamp">{{ item.timestamp }}</span>
+        </div>
+        <p class="comment-text">{{ item.text }}</p>
 
         <div class="comment-actions">
           {% if current_user and current_user.username == item.user %}
-          <form method="post" style="display: inline-block; margin-right: 6px">
+          <form method="post" class="edit-form">
             <input type="hidden" name="edit_review_id" value="{{ item.id }}" />
             <textarea name="body" required rows="2">{{ item.text }}</textarea>
-            <button type="submit" class="primary">Güncelle</button>
+            <div class="form-buttons">
+              <button type="submit" class="primary">Güncelle</button>
+              <button
+                type="button"
+                class="ghost"
+                onclick="this.closest('form').style.display='none'"
+              >
+                İptal
+              </button>
+            </div>
           </form>
-          <form method="post" style="display: inline-block">
-            <input
-              type="hidden"
-              name="delete_review_id"
-              value="{{ item.id }}"
-            />
-            <button type="submit" class="ghost">Sil</button>
-          </form>
+          <div class="comment-edit-delete">
+            <button
+              class="ghost"
+              onclick="this.closest('.comment-actions').querySelector('.edit-form').style.display='block'"
+            >
+              Düzenle
+            </button>
+            <form method="post" style="display: inline-block">
+              <input
+                type="hidden"
+                name="delete_review_id"
+                value="{{ item.id }}"
+              />
+              <button type="submit" class="ghost">Sil</button>
+            </form>
+          </div>
           {% endif %} {% if current_user %} {% if item.current_user_reaction %}
-          <form method="post" style="display: inline-block; margin-left: 6px">
+          <form method="post" class="reaction-form">
             <input type="hidden" name="react_review_id" value="{{ item.id }}" />
             <input type="hidden" name="reaction_action" value="remove" />
-            <button type="submit">💔 {{ item.reactions.like }}</button>
+            <button type="submit" class="reaction-btn liked">
+              💔 {{ item.reactions.like }}
+            </button>
           </form>
           {% else %}
-          <form method="post" style="display: inline-block; margin-left: 6px">
+          <form method="post" class="reaction-form">
             <input type="hidden" name="react_review_id" value="{{ item.id }}" />
             <input type="hidden" name="reaction_action" value="add" />
             <input type="hidden" name="reaction_type" value="like" />
-            <button type="submit">♥ {{ item.reactions.like }}</button>
+            <button type="submit" class="reaction-btn">
+              ♥ {{ item.reactions.like }}
+            </button>
           </form>
           {% endif %} {% endif %}
         </div>

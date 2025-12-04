@@ -38,6 +38,87 @@ import os
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
+def _get_or_create_content(content_id: str):
+    """Get content from DB or create it from external API with full details."""
+    # Try to find in database first
+    content = Content.query.filter_by(external_id=content_id).first()
+    if content:
+        return content
+    
+    # Try by numeric ID
+    if content_id.startswith('content-'):
+        try:
+            pk = int(content_id.split('content-')[-1])
+            content = Content.query.get(pk)
+            if content:
+                return content
+        except Exception:
+            pass
+    
+    # If external ID (mov-xxx or book-xxx), fetch from API and create with full details
+    if content_id.startswith('mov-'):
+        ext_data = get_tmdb_movie_details(content_id)
+        if ext_data:
+            content = Content(
+                external_id=content_id,
+                content_type='movie',
+                title=ext_data.get('title'),
+                release_year=int(ext_data.get('year')) if ext_data.get('year') else None,
+                cover_url=ext_data.get('poster'),
+                synopsis=ext_data.get('synopsis'),
+                runtime_minutes=ext_data.get('runtime_minutes'),
+                extra_metadata={
+                    'genres': ext_data.get('genres', []),
+                    'directors': ext_data.get('directors', []),
+                    'cast': ext_data.get('cast', []),
+                }
+            )
+        else:
+            # Fallback: create minimal record even without API data
+            content = Content(
+                external_id=content_id,
+                content_type='movie',
+                title=f"Movie {content_id}",
+                release_year=None,
+                cover_url=None
+            )
+        db.session.add(content)
+        db.session.commit()
+        return content
+    
+    elif content_id.startswith('book-'):
+        ext_data = get_book_details(content_id)
+        if ext_data:
+            content = Content(
+                external_id=content_id,
+                content_type='book',
+                title=ext_data.get('title'),
+                release_year=int(ext_data.get('year')) if ext_data.get('year') else None,
+                cover_url=ext_data.get('poster'),
+                synopsis=ext_data.get('synopsis'),
+                page_count=ext_data.get('page_count'),
+                extra_metadata={
+                    'genres': ext_data.get('genres', []),
+                    'authors': ext_data.get('authors', []),
+                    'publishers': ext_data.get('publishers', []),
+                }
+            )
+        else:
+            # Fallback: create minimal record even without API data
+            content = Content(
+                external_id=content_id,
+                content_type='book',
+                title=f"Book {content_id}",
+                release_year=None,
+                cover_url=None
+            )
+        db.session.add(content)
+        db.session.commit()
+        return content
+    
+    return None
+
+
 def _paginate(items, page: int, per_page: int):
     start = (page - 1) * per_page
     end = start + per_page
@@ -93,8 +174,11 @@ def api_feed():
     if follower_identity:
         followed_ids = [f.followed_id for f in Follow.query.filter_by(follower_id=follower_identity).all()]
         if followed_ids:
-            q = Activity.query.filter(Activity.user_id.in_(followed_ids)).order_by(Activity.created_at.desc())
+            # Show activities from followed users AND the current user
+            all_user_ids = followed_ids + [follower_identity]
+            q = Activity.query.filter(Activity.user_id.in_(all_user_ids)).order_by(Activity.created_at.desc())
         else:
+            # No followed users, show all activities (including own)
             q = Activity.query.order_by(Activity.created_at.desc())
     else:
         q = Activity.query.order_by(Activity.created_at.desc())
@@ -787,8 +871,8 @@ def api_create_or_update_rating(content_id: str):
     if not user:
         return jsonify({"message": "User not found"}), 404
 
-    # locate content
-    content = Content.query.filter_by(external_id=content_id).first() or (Content.query.get(int(content_id.split('content-')[-1])) if content_id.startswith('content-') else None)
+    # locate or create content
+    content = _get_or_create_content(content_id)
     if not content:
         return jsonify({"message": "Content not found"}), 404
 
@@ -800,10 +884,10 @@ def api_create_or_update_rating(content_id: str):
 
     rating = Rating(user_id=user.id, content_id=content.id, score=score)
     db.session.add(rating)
-    db.session.commit()
+    db.session.flush()  # Ensure rating is saved before creating activity
 
     # create an activity for the rating
-    act = Activity(user_id=user.id, activity_type="rating", related_id=content.id, extra_metadata={"score": score}, created_at=db.func.now())
+    act = Activity(user_id=user.id, activity_type="rating", related_id=content.id, extra_metadata={"score": score})
     db.session.add(act)
     db.session.commit()
 
@@ -827,18 +911,18 @@ def api_create_review(content_id: str):
     if not user:
         return jsonify({"message": "User not found"}), 404
 
-    # locate content
-    content = Content.query.filter_by(external_id=content_id).first() or (Content.query.get(int(content_id.split('content-')[-1])) if content_id.startswith('content-') else None)
+    # locate or create content
+    content = _get_or_create_content(content_id)
     if not content:
         return jsonify({"message": "Content not found"}), 404
 
     # create review
     review = Review(user_id=user.id, content_id=content.id, body=body)
     db.session.add(review)
-    db.session.commit()
+    db.session.flush()  # Ensure review is saved before creating activity
 
     # create activity for review
-    act = Activity(user_id=user.id, activity_type="review", related_id=content.id, extra_metadata={"comment": body}, created_at=db.func.now())
+    act = Activity(user_id=user.id, activity_type="review", related_id=content.id, extra_metadata={"comment": body})
     db.session.add(act)
     db.session.commit()
 
@@ -968,7 +1052,7 @@ def api_add_library_item(content_id: str):
     if not user:
         return jsonify({"message": "User not found"}), 404
 
-    content = Content.query.filter_by(external_id=content_id).first() or (Content.query.get(int(content_id.split('content-')[-1])) if content_id.startswith('content-') else None)
+    content = _get_or_create_content(content_id)
     if not content:
         return jsonify({"message": "Content not found"}), 404
 
@@ -994,7 +1078,7 @@ def api_remove_library_item(content_id: str):
     if not user:
         return jsonify({"message": "User not found"}), 404
 
-    content = Content.query.filter_by(external_id=content_id).first() or (Content.query.get(int(content_id.split('content-')[-1])) if content_id.startswith('content-') else None)
+    content = _get_or_create_content(content_id)
     if not content:
         return jsonify({"message": "Content not found"}), 404
 
