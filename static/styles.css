@@ -386,6 +386,38 @@ button {
   flex-wrap: wrap;
 }
 
+/* Mobile styles */
+@media (max-width: 700px) {
+  .header-inner {
+    height: 56px;
+    padding: 0.5rem 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .menu-toggle { display: inline-block; background: transparent; border: none; font-size: 1.3rem; }
+  .nav-links {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 260px;
+    background: white;
+    box-shadow: 8px 0 24px rgba(2,6,23,0.12);
+    transform: translateX(-110%);
+    transition: transform 220ms ease;
+    padding: 3.5rem 1rem 1rem;
+    z-index: 40;
+  }
+  body.nav-open .nav-links { transform: translateX(0); }
+  .nav-links a { display: block; margin: 0.6rem 0; padding: 0.5rem 0.4rem; }
+  .container { padding: 0 1rem; }
+  .explore-hero { grid-template-columns: 1fr; }
+
+  .mobile-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.32); z-index: 30; opacity: 0; pointer-events: none; transition: opacity 200ms ease; }
+  body.nav-open .mobile-overlay { opacity: 1; pointer-events: auto; }
+}
+
 .filter-group {
   display: flex;
   flex-direction: column;

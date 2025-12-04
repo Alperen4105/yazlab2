@@ -129,8 +129,40 @@ def forgot_password():
     if request.method == "POST":
         email = request.form.get("email")
         if email:
-            message = "Eğer hesabınız varsa sıfırlama bağlantısı e-posta adresinize gönderildi."
+            payload, status = api_request(
+                "post",
+                "/api/auth/forgot-password",
+                json={"email": email},
+            )
+            if status == 200:
+                message = payload.get("message") or "Eğer hesabınız varsa sıfırlama bağlantısı e-posta adresinize gönderildi."
+            else:
+                message = payload.get("message", "İşlem sırasında hata oluştu.")
     return render_template("auth/forgot_password.html", message=message)
+
+
+
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    token = request.args.get("token") or request.form.get("token")
+    message = None
+    if request.method == "POST":
+        password = request.form.get("password")
+        confirm = request.form.get("confirm_password")
+        if not password or password != confirm:
+            message = "Şifreler eşleşmiyor veya boş"
+        else:
+            payload, status = api_request(
+                "post",
+                "/api/auth/reset-password",
+                json={"token": token, "password": password},
+            )
+            if status == 200:
+                message = payload.get("message", "Parola güncellendi")
+                return render_template("auth/reset_password.html", message=message, success=True)
+            else:
+                message = payload.get("message", "İşlem başarısız")
+    return render_template("auth/reset_password.html", token=token, message=message)
 
 
 @app.route("/explore")

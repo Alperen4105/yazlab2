@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -8,7 +8,7 @@ from flask_jwt_extended import (
     jwt_required,
     verify_jwt_in_request,
 )
-from sqlalchemy import or_
+from sqlalchemy import or_, func, desc
 
 from backend.extensions import db
 from backend.models import User
@@ -28,6 +28,10 @@ from backend.clients import (
     get_tmdb_movie_details,
     get_book_details,
 )
+from backend.mail import send_email
+import secrets
+from datetime import datetime, timedelta
+from backend.models import PasswordReset
 from datetime import timezone, datetime
 import os
 
@@ -210,19 +214,74 @@ def api_explore():
         if results:
             films = [r for r in results if r["kind"] == "film"]
             books = [r for r in results if r["kind"] == "book"]
-            
+
             # Create showcase sections if no specific query
             if not query:
-                # Top rated (score >= 8)
-                top_rated = sorted([r for r in results if r.get("score") and r["score"] >= 8], key=lambda x: x.get("score", 0), reverse=True)[:10]
-                # Most recent
-                recent = sorted([r for r in results if r.get("year")], key=lambda x: x.get("year", 0), reverse=True)[:10]
-                
                 sections = {}
-                if top_rated:
-                    sections["En Y\u00fcksek Puanl\u0131"] = top_rated
+
+                # Top rated using DB aggregates (avg score)
+                try:
+                    top_q = (
+                        db.session.query(Content.id, Content.title, Content.cover_url, Content.release_year, func.avg(Rating.score).label("avg_score"), func.count(Rating.id).label("num_ratings"))
+                        .join(Rating)
+                        .group_by(Content.id)
+                        .order_by(func.avg(Rating.score).desc())
+                        .limit(10)
+                        .all()
+                    )
+                    top_rated = []
+                    for cid, title, poster, year, avg_score, num in top_q:
+                        top_rated.append({
+                            "id": f"content-{cid}",
+                            "title": title,
+                            "poster": poster,
+                            "year": year,
+                            "score": round(float(avg_score), 1) if avg_score is not None else None,
+                            "num_ratings": int(num),
+                            "kind": "film" if Content.query.get(cid).content_type == "movie" else "book",
+                            "persisted": True,
+                            "source": "local",
+                        })
+                    if top_rated:
+                        sections["En Y\u00fcksek Puanl\u0131"] = top_rated
+                except Exception:
+                    # fallback to in-memory top_rated if aggregate fails
+                    top_rated = sorted([r for r in results if r.get("score")], key=lambda x: x.get("score", 0), reverse=True)[:10]
+                    if top_rated:
+                        sections["En Y\u00fcksek Puanl\u0131"] = top_rated
+
+                # Most discussed using Review counts
+                try:
+                    disc_q = (
+                        db.session.query(Content.id, Content.title, Content.cover_url, Content.release_year, func.count(Review.id).label("rev_count"))
+                        .join(Review)
+                        .group_by(Content.id)
+                        .order_by(func.count(Review.id).desc())
+                        .limit(10)
+                        .all()
+                    )
+                    most_discussed = []
+                    for cid, title, poster, year, rev_count in disc_q:
+                        most_discussed.append({
+                            "id": f"content-{cid}",
+                            "title": title,
+                            "poster": poster,
+                            "year": year,
+                            "review_count": int(rev_count),
+                            "kind": "film" if Content.query.get(cid).content_type == "movie" else "book",
+                            "persisted": True,
+                            "source": "local",
+                        })
+                    if most_discussed:
+                        sections["En \u00c7ok Tart\u0131\u015f\u0131lan"] = most_discussed
+                except Exception:
+                    pass
+
+                # Recent additions by year
+                recent = sorted([r for r in results if r.get("year")], key=lambda x: x.get("year", 0), reverse=True)[:10]
                 if recent:
                     sections["Yeni Eklenenler"] = recent
+
                 if films:
                     sections["Filmler"] = films[:10]
                 if books:
@@ -233,7 +292,7 @@ def api_explore():
                     sections["Filmler"] = films
                 if books:
                     sections["Kitaplar"] = books
-            
+
             return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
 
         # if the DB returned nothing for the query, try external search
@@ -424,6 +483,108 @@ def api_admin_db_summary():
             "contents": sample_contents,
         },
     })
+
+
+
+@api_bp.post("/admin/seed-activities")
+def api_admin_seed_activities():
+    """Trigger seeding of Activity rows from existing Rating/Review records.
+
+    Protected via header `X-Admin-Key: <ADMIN_KEY>` similar to `api_admin_db_summary`.
+    """
+    admin_key = os.getenv("ADMIN_KEY")
+    provided = request.headers.get("X-Admin-Key")
+    if admin_key and provided != admin_key:
+        return jsonify({"message": "forbidden"}), 403
+
+    try:
+        from backend.fixtures import seed_activities_from_existing
+
+        created = seed_activities_from_existing()
+        return jsonify({"message": "activities seeded", "created": created})
+    except Exception as exc:
+        return jsonify({"message": "seeding failed", "error": str(exc)}), 500
+
+
+
+@api_bp.post('/auth/forgot-password')
+def api_auth_forgot_password():
+    data = request.get_json() or {}
+    email = (data.get('email') or '').strip()
+    if not email:
+        return jsonify({'message': 'email required'}), 400
+
+    # look up user by email (case-insensitive)
+    try:
+        user = User.query.filter(func.lower(User.email) == email.lower()).first()
+    except Exception:
+        # fallback to exact match if something goes wrong with func
+        user = User.query.filter_by(email=email).first()
+    if not user:
+        # don't reveal whether the email exists
+        return jsonify({'message': 'If an account exists, a reset email has been sent.'})
+
+    # create single-use DB-backed token
+    token = secrets.token_urlsafe(32)
+    expires_seconds = int(os.getenv('RESET_TOKEN_EXPIRATION', '3600'))
+    expires_at = datetime.utcnow() + timedelta(seconds=expires_seconds)
+    pr = PasswordReset(user_id=user.id, token=token, used=False, expires_at=expires_at)
+    try:
+        db.session.add(pr)
+        db.session.commit()
+    except Exception as exc:
+        current_app.logger.exception('Failed to create PasswordReset record: %s', exc)
+        return jsonify({'message': 'failed to create reset token'}), 500
+
+    # build reset link
+    base = os.getenv('APP_BASE_URL', 'http://127.0.0.1:5000')
+    reset_path = f"/reset-password?token={token}"
+    link = base.rstrip('/') + reset_path
+
+    # render a simple text email
+    subject = 'Sosyal Kütüphane - Parola Sıfırlama'
+    body = f"Merhaba {user.display_name or user.username},\n\n"
+    body += "Parolanızı sıfırlamak için aşağıdaki bağlantıya tıklayın. Bu bağlantı 1 saat sonra geçersiz olacaktır.\n\n"
+    body += f"{link}\n\n"
+    body += "Eğer bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.\n\nSosyal Kütüphane Ekibi"
+
+    sent = send_email(subject, user.email, body)
+    if not sent:
+        current_app.logger.warning('Failed to send reset email to %s', user.email)
+
+    return jsonify({'message': 'If an account exists, a reset email has been sent.'})
+
+
+@api_bp.post('/auth/reset-password')
+def api_auth_reset_password():
+    data = request.get_json() or {}
+    token = data.get('token')
+    new_password = data.get('password')
+    if not token or not new_password:
+        return jsonify({'message': 'token and password required'}), 400
+
+    # validate token via DB
+    pr = PasswordReset.query.filter_by(token=token).first()
+    if not pr:
+        return jsonify({'message': 'invalid token'}), 400
+    if pr.used:
+        return jsonify({'message': 'token already used'}), 400
+    if pr.expires_at < datetime.utcnow():
+        return jsonify({'message': 'token expired'}), 400
+
+    user = User.query.get(pr.user_id)
+    if not user:
+        return jsonify({'message': 'user not found'}), 404
+
+    try:
+        user.password_hash = hash_password(new_password)
+        pr.used = True
+        db.session.commit()
+        return jsonify({'message': 'password updated'})
+    except Exception as exc:
+        current_app.logger.exception('Failed to update password: %s', exc)
+        db.session.rollback()
+        return jsonify({'message': 'failed to update password'}), 500
 
 
 @api_bp.get("/content/<content_id>")

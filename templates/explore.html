@@ -77,9 +77,17 @@
         {% if item.year %}
         <p class="muted small">{{ item.year }}</p>
         {% endif %}
-        {% if item.score %}
-        <p class="score">⭐ {{ item.score }}/10</p>
-        {% endif %}
+        <div class="meta-row">
+          {% if item.score %}
+          <span class="score">⭐ {{ item.score }}/10</span>
+          {% endif %}
+          {% if item.num_ratings %}
+          <span class="badge small">{{ item.num_ratings }} oy</span>
+          {% endif %}
+          {% if item.review_count %}
+          <span class="badge small">{{ item.review_count }} yorum</span>
+          {% endif %}
+        </div>
         <a
           class="detail-link"
           href="{{ url_for('content_detail', content_type=item.kind, content_id=item.id) }}"

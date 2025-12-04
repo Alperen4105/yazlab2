@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ platform_title }}{% if title %} · {{ title }}{% endif %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}?v=1">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -43,6 +44,9 @@
       </div>
     </header>
 
+    <button id="menuToggle" class="menu-toggle" aria-label="Menu" hidden>☰</button>
+    <div id="mobileOverlay" class="mobile-overlay" hidden></div>
+
     <main class="container">
       {% block content %}{% endblock %}
     </main>
@@ -52,6 +56,34 @@
         <p>© {{ 2025 }} Sosyal Kütüphane · API Kaynakları: TMDb & Google Books</p>
       </div>
     </footer>
+    <script>
+      // register service worker if available
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/static/service-worker.js').catch(function(err){
+            console.warn('ServiceWorker registration failed:', err);
+          });
+        });
+      }
+
+      // simple mobile menu toggle
+      document.addEventListener('DOMContentLoaded', function(){
+        try{
+          var btn = document.getElementById('menuToggle');
+            if(!btn) return;
+            btn.removeAttribute('hidden');
+            var overlay = document.getElementById('mobileOverlay');
+            btn.addEventListener('click', function(){
+              document.body.classList.toggle('nav-open');
+            });
+            if(overlay){
+              overlay.addEventListener('click', function(){
+                document.body.classList.remove('nav-open');
+              });
+            }
+        }catch(e){}
+      });
+    </script>
   </body>
 </html>
 

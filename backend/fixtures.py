@@ -20,6 +20,10 @@ from backend.models import (
     Rating,
     Review,
 )
+from backend.clients import search_tmdb_movies, search_google_books
+import os
+import random
+from datetime import datetime
 from data.sample_data import FEED_ACTIVITIES, POPULAR_CONTENT, FEATURED_USERS, USER_PROFILES, LIBRARY_TABS
 
 
@@ -132,4 +136,114 @@ def seed_from_sample_data():
                 db.session.add(li)
 
     db.session.commit()
+
+    # Optionally seed some popular external content into the feed
+    try:
+        if os.getenv("SEED_POPULAR_EXTERNAL", "false").lower() == "true":
+            _seed_popular_external_into_feed(users)
+    except Exception:
+        # don't fail seeding if external clients are unavailable
+        pass
+
+
+def _seed_popular_external_into_feed(existing_users, limit: int = 10):
+    """Optional development helper: fetch popular movies/books and create
+    Content + Rating + Activity entries so feed shows lively external items.
+
+    Controlled by env `SEED_POPULAR_EXTERNAL=true` to avoid network calls by default.
+    """
+    if not existing_users:
+        return
+    owner = existing_users[0]
+    # broad queries to surface a variety of results; these functions are resilient
+    # and will no-op if requests/key missing.
+    movie_results = search_tmdb_movies("the", limit=limit) or []
+    book_results = search_google_books("the", limit=limit) or []
+    created = 0
+    for r in (movie_results + book_results):
+        if not r:
+            continue
+        ext_id = r.get("external_id") or r.get("id")
+        if not ext_id:
+            continue
+        # skip if already ingested
+        if Content.query.filter_by(external_id=ext_id).first():
+            continue
+        try:
+            cont = Content(
+                external_id=ext_id,
+                content_type=("movie" if r.get("kind") == "film" else "book"),
+                title=r.get("title") or "Untitled",
+                release_year=int(r.get("year")) if r.get("year") else None,
+                cover_url=r.get("poster") or None,
+                runtime_minutes=r.get("runtime_minutes"),
+                page_count=r.get("page_count"),
+                extra_metadata=r.get("extra") or r.get("extra_details") or {},
+            )
+            db.session.add(cont)
+            db.session.flush()
+
+            # add a faux rating so feed shows a rating activity
+            score = random.randint(7, 9)
+            rating = Rating(user_id=owner.id, content_id=cont.id, score=score)
+            db.session.add(rating)
+
+            act = Activity(user_id=owner.id, activity_type="rating", related_id=cont.id, extra_metadata={"score": score}, created_at=datetime.utcnow())
+            db.session.add(act)
+
+            created += 1
+            if created >= limit:
+                break
+        except Exception:
+            # ignore individual failures
+            continue
+    if created:
+        db.session.commit()
+
+
+def seed_activities_from_existing() -> int:
+    """Create Activity rows for existing Rating and Review records where missing.
+
+    Returns the number of Activity rows created.
+    """
+    created = 0
+    # Ratings -> rating activities
+    for r in Rating.query.all():
+        try:
+            exists = Activity.query.filter_by(user_id=r.user_id, activity_type="rating", related_id=r.content_id).first()
+            if exists:
+                continue
+            act = Activity(
+                user_id=r.user_id,
+                activity_type="rating",
+                related_id=r.content_id,
+                extra_metadata={"score": r.score},
+                created_at=(r.created_at if hasattr(r, 'created_at') and r.created_at else datetime.utcnow()),
+            )
+            db.session.add(act)
+            created += 1
+        except Exception:
+            continue
+
+    # Reviews -> review activities
+    for rev in Review.query.all():
+        try:
+            exists = Activity.query.filter_by(user_id=rev.user_id, activity_type="review", related_id=rev.content_id).first()
+            if exists:
+                continue
+            act = Activity(
+                user_id=rev.user_id,
+                activity_type="review",
+                related_id=rev.content_id,
+                extra_metadata={"comment": rev.body},
+                created_at=(rev.created_at if hasattr(rev, 'created_at') and rev.created_at else datetime.utcnow()),
+            )
+            db.session.add(act)
+            created += 1
+        except Exception:
+            continue
+
+    if created:
+        db.session.commit()
+    return created
 
