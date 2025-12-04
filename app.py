@@ -389,7 +389,6 @@ def update_profile(username: str):
             
             # Store relative URL path
             avatar_data = f"/static/uploads/avatars/{filename}"
-            app.logger.info(f"Avatar saved to: {avatar_data}")
             
         except Exception as e:
             app.logger.error(f"Error processing image: {e}")

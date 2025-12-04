@@ -182,12 +182,20 @@ main {
   gap: 0.6rem;
 }
 
-.activity-card footer button {
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  border-radius: 999px;
-  padding: 0.2rem 0.8rem;
-  cursor: pointer;
+.content-stats {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.8rem 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.stat-item {
+  font-size: 0.9rem;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 500;
 }
 
 .auth-card {

@@ -21,7 +21,9 @@
         activity.user.name }}, "{{ activity.list_name }}" listesine yeni bir
         içerik ekledi. {% else %}{{ activity.user.name }} bir içerikle
         etkileşimde bulundu. {% endif %}
-        <span class="timestamp">{{ activity.humanized_timestamp or activity.timestamp }}</span>
+        <span class="timestamp"
+          >{{ activity.humanized_timestamp or activity.timestamp }}</span
+        >
       </p>
     </div>
   </header>
@@ -38,13 +40,19 @@
       {% if activity.type == "rating" %}
       <p class="score">Verilen puan: <span>{{ activity.score }}/10</span></p>
       <div class="stars" aria-label="puan">
-        {% set s = activity.score or 0 %}
-        {% for i in range(1,11) %}
-          <span class="star {{ 'on' if i <= s else 'off' }}">★</span>
+        {% set s = activity.score or 0 %} {% for i in range(1, s|int + 1) %}
+        <span class="star on">★</span>
         {% endfor %}
       </div>
+      <a
+        class="read-more"
+        href="{{ url_for('content_detail', content_type=activity.content.kind, content_id=activity.content.id) }}"
+        >daha fazlasını oku →</a
+      >
       {% elif activity.type == "review" %}
-      <p class="excerpt">{{ (activity.comment or '') | truncate(180, True) }}</p>
+      <p class="excerpt">
+        {{ (activity.comment or '') | truncate(180, True) }}
+      </p>
       <a
         class="read-more"
         href="{{ url_for('content_detail', content_type=activity.content.kind, content_id=activity.content.id) }}"
@@ -58,22 +66,16 @@
   {% endif %}
 
   <footer>
-    <form
-      method="post"
-      action="{{ url_for('activity_like', activity_id=activity.id.split('-')[-1]|int) }}"
-      style="display: inline-block"
-    >
-      {% if current_user %}
-      <button class="ghost" type="submit">👍 {{ activity.likes }}</button>
-      {% else %}
-      <a class="ghost" href="{{ url_for('login') }}">👍 {{ activity.likes }}</a>
-      {% endif %}
-    </form>
-    <a
-      class="ghost"
-      href="{{ url_for('content_detail', content_type=activity.content.kind if activity.content else 'film', content_id=activity.content.id if activity.content else '') }}"
-      >💬 {{ activity.comments }}</a
-    >
+    {% if activity.content %}
+    <div class="content-stats">
+      <span class="stat-item"
+        >⭐ {{ "%.1f"|format(activity.content.avg_rating or 0) }} puan</span
+      >
+      <span class="stat-item"
+        >💬 {{ activity.content.review_count or 0 }} yorum</span
+      >
+    </div>
+    {% endif %}
   </footer>
 </article>
 {%- endmacro %}

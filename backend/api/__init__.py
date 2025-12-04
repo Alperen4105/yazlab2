@@ -208,12 +208,25 @@ def api_feed():
             "comments": a.extra_metadata.get("comments") if a.extra_metadata else 0,
         }
         if content:
+            # Calculate average rating and review count
+            avg_rating = 0.0
+            review_count = 0
+            try:
+                from sqlalchemy import func
+                rating_result = db.session.query(func.avg(Rating.score)).filter_by(content_id=content.id).scalar()
+                avg_rating = round(float(rating_result), 1) if rating_result else 0.0
+                review_count = Review.query.filter_by(content_id=content.id).count()
+            except Exception:
+                pass
+            
             item["content"] = {
                 "id": f"content-{content.id}",
                 "title": content.title,
                 "year": content.release_year,
                 "poster": content.cover_url,
                 "kind": "film" if content.content_type == "movie" else "book",
+                "avg_rating": avg_rating,
+                "review_count": review_count,
             }
             if a.extra_metadata:
                 item["score"] = a.extra_metadata.get("score")

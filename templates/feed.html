@@ -1,6 +1,5 @@
-{% extends "base.html" %}
-{% from "components/activity_card.html" import activity_card %}
-{% block content %}
+{% extends "base.html" %} {% from "components/activity_card.html" import
+activity_card %} {% block content %}
 <div class="layout-grid">
   <section>
     <div class="section-heading">
@@ -11,16 +10,20 @@
       <button class="ghost">Yeni Gönderi</button>
     </div>
     <div class="activity-list" id="activityList">
-      {% for activity in activities %}
-        {{ activity_card(activity) }}
-      {% else %}
-        <p class="muted">Henüz aktivite yok.</p>
+      {% for activity in activities %} {{ activity_card(activity) }} {% else %}
+      <p class="muted">Henüz aktivite yok.</p>
       {% endfor %}
     </div>
     {% if has_more %}
-      <button id="loadMoreBtn" class="load-more-btn" data-page="{{ current_page + 1 }}">Daha Fazla Yükle</button>
+    <button
+      id="loadMoreBtn"
+      class="load-more-btn"
+      data-page="{{ current_page + 1 }}"
+    >
+      Daha Fazla Yükle
+    </button>
     {% else %}
-      <!-- Debug: has_more={{ has_more }}, current_page={{ current_page }} -->
+    <!-- Debug: has_more={{ has_more }}, current_page={{ current_page }} -->
     {% endif %}
   </section>
 
@@ -29,10 +32,10 @@
       <p class="eyebrow">Öne Çıkan Listeler</p>
       <ul class="list-items">
         {% for item in featured_lists %}
-          <li>
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.items }} içerik · {{ item.owner }}</span>
-          </li>
+        <li>
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.items }} içerik · {{ item.owner }}</span>
+        </li>
         {% endfor %}
       </ul>
     </div>
@@ -40,102 +43,142 @@
       <p class="eyebrow">Popüler Kullanıcılar</p>
       <ul class="list-items">
         {% for user in featured_users %}
-          <li><a href="{{ url_for('profile', username=user.username) }}">{{ user.name }}</a></li>
+        <li>
+          <a href="{{ url_for('profile', username=user.username) }}"
+            >{{ user.name }}</a
+          >
+        </li>
         {% endfor %}
       </ul>
     </div>
   </aside>
 </div>
 <script>
-(function() {
-  const btn = document.getElementById('loadMoreBtn');
-  if (!btn) return;
-  const list = document.getElementById('activityList');
-  let loading = false;
+  (function () {
+    const btn = document.getElementById("loadMoreBtn");
+    if (!btn) return;
+    const list = document.getElementById("activityList");
+    let loading = false;
 
-  btn.addEventListener('click', async () => {
-    if (loading) return;
-    loading = true;
-    btn.textContent = 'Yükleniyor...';
-    btn.disabled = true;
+    btn.addEventListener("click", async () => {
+      if (loading) return;
+      loading = true;
+      btn.textContent = "Yükleniyor...";
+      btn.disabled = true;
 
-    const page = btn.dataset.page;
-    try {
-      const res = await fetch(`/api/feed?page=${page}`);
-      const data = await res.json();
+      const page = btn.dataset.page;
+      try {
+        const res = await fetch(`/api/feed?page=${page}`);
+        const data = await res.json();
 
-      data.items.forEach(act => {
-        const card = createActivityCard(act);
-        list.insertAdjacentHTML('beforeend', card);
-      });
+        data.items.forEach((act) => {
+          const card = createActivityCard(act);
+          list.insertAdjacentHTML("beforeend", card);
+        });
 
-      if (data.has_more) {
-        btn.dataset.page = data.page + 1;
-        btn.textContent = 'Daha Fazla Yükle';
-        btn.disabled = false;
-      } else {
-        btn.remove();
-      }
-    } catch (e) {
-      btn.textContent = 'Hata oluştu';
-      btn.disabled = false;
-    }
-    loading = false;
-  });
-
-  function createActivityCard(act) {
-    const user = act.user;
-    const content = act.content;
-    const timestamp = act.humanized_timestamp || act.timestamp || '';
-    
-    let activityText = '';
-    if (act.type === 'rating') {
-      activityText = `${user.name} ${content ? content.title : ''} için puan verdi.`;
-    } else if (act.type === 'review') {
-      activityText = `${user.name} ${content ? content.title : ''} hakkında yorum yaptı.`;
-    } else if (act.type === 'list_add') {
-      activityText = `${user.name}, "${act.list_name || 'liste'}" listesine yeni bir içerik ekledi.`;
-    } else {
-      activityText = `${user.name} bir içerikle etkileşimde bulundu.`;
-    }
-
-    let contentBody = '';
-    if (content) {
-      let innerContent = `<h3>${content.title} (${content.year})</h3>`;
-      
-      if (act.type === 'rating' && act.score !== null && act.score !== undefined) {
-        innerContent += `<p class="score">Verilen puan: <span>${act.score}/10</span></p>`;
-        innerContent += '<div class="stars" aria-label="puan">';
-        for (let i = 1; i <= 10; i++) {
-          innerContent += `<span class="star ${i <= act.score ? 'on' : 'off'}">★</span>`;
+        if (data.has_more) {
+          btn.dataset.page = data.page + 1;
+          btn.textContent = "Daha Fazla Yükle";
+          btn.disabled = false;
+        } else {
+          btn.remove();
         }
-        innerContent += '</div>';
-      } else if (act.type === 'review' && act.comment) {
-        const truncated = act.comment.length > 180 ? act.comment.substring(0, 180) + '...' : act.comment;
-        innerContent += `<p class="excerpt">${truncated}</p>`;
-        innerContent += `<a class="read-more" href="/content/${content.kind}/${content.id}">daha fazlasını oku →</a>`;
-      } else if (act.type === 'list_add' && act.list_name) {
-        innerContent += `<p>"${act.list_name}" listesine eklendi.</p>`;
+      } catch (e) {
+        btn.textContent = "Hata oluştu";
+        btn.disabled = false;
+      }
+      loading = false;
+    });
+
+    function createActivityCard(act) {
+      const user = act.user;
+      const content = act.content;
+      const timestamp = act.humanized_timestamp || act.timestamp || "";
+
+      let activityText = "";
+      if (act.type === "rating") {
+        activityText = `${user.name} ${
+          content ? content.title : ""
+        } için puan verdi.`;
+      } else if (act.type === "review") {
+        activityText = `${user.name} ${
+          content ? content.title : ""
+        } hakkında yorum yaptı.`;
+      } else if (act.type === "list_add") {
+        activityText = `${user.name}, "${
+          act.list_name || "liste"
+        }" listesine yeni bir içerik ekledi.`;
+      } else {
+        activityText = `${user.name} bir içerikle etkileşimde bulundu.`;
       }
 
-      contentBody = `
+      let contentBody = "";
+      if (content) {
+        let innerContent = `<h3>${content.title} (${content.year})</h3>`;
+
+        if (
+          act.type === "rating" &&
+          act.score !== null &&
+          act.score !== undefined
+        ) {
+          innerContent += `<p class="score">Verilen puan: <span>${act.score}/10</span></p>`;
+          innerContent += '<div class="stars" aria-label="puan">';
+          for (let i = 1; i <= 10; i++) {
+            innerContent += `<span class="star ${
+              i <= act.score ? "on" : "off"
+            }">★</span>`;
+          }
+          innerContent += "</div>";
+        } else if (act.type === "review" && act.comment) {
+          const truncated =
+            act.comment.length > 180
+              ? act.comment.substring(0, 180) + "..."
+              : act.comment;
+          innerContent += `<p class="excerpt">${truncated}</p>`;
+          innerContent += `<a class="read-more" href="/content/${content.kind}/${content.id}">daha fazlasını oku →</a>`;
+        } else if (act.type === "list_add" && act.list_name) {
+          innerContent += `<p>"${act.list_name}" listesine eklendi.</p>`;
+        }
+
+        contentBody = `
     <div class="card-body">
-      <img class="poster" src="${content.poster || '/static/placeholder-content.svg'}" alt="${content.title}" />
+      <img class="poster" src="${
+        content.poster || "/static/placeholder-content.svg"
+      }" alt="${content.title}" />
       <div>${innerContent}</div>
     </div>`;
-    }
+      }
 
-    const activityId = act.id.split('-')[1] || '0';
-    const loginUrl = '/login';
-    const contentUrl = content ? `/content/${content.kind}/${content.id}` : '#';
+      const activityId = act.id.split("-")[1] || "0";
+      const loginUrl = "/login";
+      const contentUrl = content
+        ? `/content/${content.kind}/${content.id}`
+        : "#";
 
-    return `
+      let statsHtml = "";
+      if (content) {
+        const avgRating = content.avg_rating || 0;
+        const reviewCount = content.review_count || 0;
+        statsHtml = `
+    <div class="content-stats">
+      <span class="stat-item">⭐ ${avgRating.toFixed(1)} puan</span>
+      <span class="stat-item">💬 ${reviewCount} yorum</span>
+    </div>`;
+      }
+
+      return `
 <article class="activity-card activity-${act.type}">
   <header>
-    <img src="${user.avatar || '/static/default-avatar.svg'}" alt="${user.name}" />
+    <img src="${user.avatar || "/static/default-avatar.svg"}" alt="${
+        user.name
+      }" />
     <div>
       <strong>
-        ${user.username ? `<a href="/profile/${user.username}">${user.name}</a>` : user.name}
+        ${
+          user.username
+            ? `<a href="/profile/${user.username}">${user.name}</a>`
+            : user.name
+        }
       </strong>
       <p>
         ${activityText}
@@ -145,14 +188,10 @@
   </header>
   ${contentBody}
   <footer>
-    <form method="post" action="/activity/${activityId}/like" style="display: inline-block">
-      <button class="ghost" type="submit">👍 ${act.likes || 0}</button>
-    </form>
-    <a class="ghost" href="${contentUrl}">💬 ${act.comments || 0}</a>
+    ${statsHtml}
   </footer>
 </article>`;
-  }
-})();
+    }
+  })();
 </script>
 {% endblock %}
-
