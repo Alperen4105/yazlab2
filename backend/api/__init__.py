@@ -630,6 +630,10 @@ def api_content_detail(content_id: str):
                             "kind": "film",
                             "platform_score": None,
                             "total_votes": 0,
+                            "synopsis": ext.get("synopsis"),
+                            "genres": ext.get("genres", []),
+                            "cast": ext.get("cast", []),
+                            "directors": ext.get("directors", []),
                             "meta": {"runtime_minutes": ext.get("runtime_minutes")},
                         }
                         return jsonify({"content": cont, "comments": []})
@@ -644,6 +648,10 @@ def api_content_detail(content_id: str):
                             "kind": "book",
                             "platform_score": None,
                             "total_votes": 0,
+                            "synopsis": ext.get("synopsis"),
+                            "genres": ext.get("genres", []),
+                            "authors": ext.get("authors", []),
+                            "publishers": ext.get("publishers", []),
                             "meta": {"page_count": ext.get("page_count")},
                         }
                         return jsonify({"content": cont, "comments": []})

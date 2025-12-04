@@ -6,26 +6,28 @@
 </section>
 {% else %}
 <section class="content-hero">
-  <img
-    src="{{ content.poster or url_for('static', filename='placeholder-content.svg') }}"
-    alt="{{ content.title }}"
-  />
+  <div class="content-poster-wrapper">
+    <img
+      src="{{ content.poster or url_for('static', filename='placeholder-content.svg') }}"
+      alt="{{ content.title }}"
+      class="content-poster-large"
+    />
+  </div>
   <div class="content-info">
     <p class="eyebrow">{{ content.kind | upper }}</p>
-    <h1>{{ content.title }}</h1>
-    
+    <h1 class="content-title">{{ content.title }}</h1>
+
     <div class="content-meta">
       {% if content.year %}
       <span class="meta-item">📅 {{ content.year }}</span>
-      {% endif %}
-      {% if content.meta and content.meta.runtime_minutes %}
+      {% endif %} {% if content.meta and content.meta.runtime_minutes %}
       <span class="meta-item">⏱️ {{ content.meta.runtime_minutes }} dk</span>
-      {% endif %}
-      {% if content.meta and content.meta.page_count %}
+      {% endif %} {% if content.meta and content.meta.page_count %}
       <span class="meta-item">📖 {{ content.meta.page_count }} sayfa</span>
-      {% endif %}
-      {% if content.platform_score %}
-      <span class="meta-item score-badge">⭐ {{ content.platform_score }}/10 ({{ content.total_votes }} oy)</span>
+      {% endif %} {% if content.platform_score %}
+      <span class="meta-item score-badge"
+        >⭐ {{ content.platform_score }}/10 ({{ content.total_votes }} oy)</span
+      >
       {% endif %}
     </div>
 
@@ -35,38 +37,36 @@
       <span class="genre-badge">{{ genre }}</span>
       {% endfor %}
     </div>
-    {% endif %}
-
-    {% if content.synopsis %}
+    {% endif %} {% if content.synopsis %}
     <div class="synopsis">
       <h3>Özet</h3>
-      <p>{{ content.synopsis }}</p>
+      <p class="synopsis-text">{{ content.synopsis }}</p>
     </div>
     {% endif %}
 
-    {% if content.directors %}
-    <div class="credits">
-      <strong>Yönetmen:</strong> {{ content.directors | join(', ') }}
+    <div class="content-credits">
+      {% if content.directors %}
+      <div class="credit-item">
+        <strong>🎬 Yönetmen:</strong>
+        <span>{{ content.directors | join(', ') }}</span>
+      </div>
+      {% endif %} {% if content.cast %}
+      <div class="credit-item">
+        <strong>🎭 Oyuncular:</strong>
+        <span>{{ content.cast | join(', ') }}</span>
+      </div>
+      {% endif %} {% if content.authors %}
+      <div class="credit-item">
+        <strong>✍️ Yazar:</strong>
+        <span>{{ content.authors | join(', ') }}</span>
+      </div>
+      {% endif %} {% if content.publishers %}
+      <div class="credit-item">
+        <strong>📚 Yayınevi:</strong>
+        <span>{{ content.publishers | join(', ') }}</span>
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
-
-    {% if content.cast %}
-    <div class="credits">
-      <strong>Oyuncular:</strong> {{ content.cast | join(', ') }}
-    </div>
-    {% endif %}
-
-    {% if content.authors %}
-    <div class="credits">
-      <strong>Yazar:</strong> {{ content.authors | join(', ') }}
-    </div>
-    {% endif %}
-
-    {% if content.publishers %}
-    <div class="credits">
-      <strong>Yayınevi:</strong> {{ content.publishers | join(', ') }}
-    </div>
-    {% endif %}
 
     <div class="actions">
       {% if current_user %}
@@ -81,7 +81,10 @@
       </form>
       {% if user_lists and user_lists|length > 0 %}
       <form method="post" style="display: inline-block; margin-right: 6px">
-        <select name="add_to_list_id" style="padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+        <select
+          name="add_to_list_id"
+          style="padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px"
+        >
           {% for lst in user_lists %}
           <option value="{{ lst.id }}">{{ lst.title }}</option>
           {% endfor %}
@@ -89,9 +92,12 @@
         <button class="ghost" type="submit">Listeye Ekle</button>
       </form>
       {% else %}
-      <a class="ghost" href="{{ url_for('profile', username=current_user.username) }}">Önce bir liste oluştur</a>
-      {% endif %}
-      {% else %}
+      <a
+        class="ghost"
+        href="{{ url_for('profile', username=current_user.username) }}"
+        >Önce bir liste oluştur</a
+      >
+      {% endif %} {% else %}
       <a class="primary" href="{{ url_for('login') }}"
         >Giriş yaparak işlem yapabilirsiniz</a
       >

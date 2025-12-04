@@ -100,6 +100,7 @@ def search_tmdb_movies(query: str, limit: int = 10) -> List[Dict]:
     try:
         r = requests.get(TMDB_SEARCH_URL, params={**params, "api_key": local_key}, timeout=5)
         if r.status_code != 200:
+            print(f"TMDb search API error: status={r.status_code}, response={r.text[:200]}")
             return []
         data = r.json()
     except Exception as e:
@@ -241,8 +242,31 @@ def get_tmdb_movie_details(external_id: str) -> Optional[Dict]:
         url = TMDB_DETAILS_URL.format(id=mid)
         r = requests.get(url, params={"api_key": local_key}, timeout=5)
         if r.status_code != 200:
+            print(f"TMDb API error: status={r.status_code}, url={url}")
             return None
         d = r.json()
+        
+        # Extract synopsis (limit to 500 characters)
+        synopsis = d.get("overview", "")
+        if synopsis and len(synopsis) > 500:
+            synopsis = synopsis[:497] + "..."
+        
+        # Extract genres
+        genres = [g.get("name") for g in d.get("genres", [])]
+        
+        # Fetch cast and crew from credits endpoint
+        cast_list = []
+        directors = []
+        try:
+            credits_url = f"https://api.themoviedb.org/3/movie/{mid}/credits"
+            credits_r = requests.get(credits_url, params={"api_key": local_key}, timeout=5)
+            if credits_r.status_code == 200:
+                credits = credits_r.json()
+                cast_list = [actor.get("name") for actor in credits.get("cast", [])[:10]]
+                directors = [crew.get("name") for crew in credits.get("crew", []) if crew.get("job") == "Director"]
+        except Exception as e:
+            print(f"Error fetching credits: {e}")
+        
         mapped = {
             "id": f"mov-{d.get('id')}",
             "external_id": f"mov-{d.get('id')}",
@@ -251,6 +275,10 @@ def get_tmdb_movie_details(external_id: str) -> Optional[Dict]:
             "poster": TMDB_IMAGE_BASE + d.get("poster_path") if d.get("poster_path") else None,
             "kind": "film",
             "runtime_minutes": d.get("runtime"),
+            "synopsis": synopsis,
+            "genres": genres,
+            "cast": cast_list,
+            "directors": directors,
             "extra": d,
         }
         _cache_set(cache_key, mapped)
@@ -284,6 +312,19 @@ def get_book_details(external_id: str) -> Optional[Dict]:
             if r.status_code == 200:
                 data = r.json()
                 vi = data.get("volumeInfo", {})
+                
+                # Extract synopsis (limit to 500 characters)
+                synopsis = vi.get("description", "")
+                if synopsis and len(synopsis) > 500:
+                    synopsis = synopsis[:497] + "..."
+                
+                # Extract genres/categories
+                genres = vi.get("categories", [])
+                
+                # Extract authors and publishers
+                authors = vi.get("authors", [])
+                publishers = [vi.get("publisher")] if vi.get("publisher") else []
+                
                 mapped = {
                     "id": f"book-{data.get('id')}",
                     "external_id": f"book-{data.get('id')}",
@@ -292,6 +333,10 @@ def get_book_details(external_id: str) -> Optional[Dict]:
                     "poster": vi.get("imageLinks", {}).get("thumbnail"),
                     "kind": "book",
                     "page_count": vi.get("pageCount"),
+                    "synopsis": synopsis,
+                    "genres": genres,
+                    "authors": authors,
+                    "publishers": publishers,
                     "extra": vi,
                 }
                 _cache_set(cache_key, mapped)
