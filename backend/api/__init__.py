@@ -45,18 +45,28 @@ def _get_or_create_content(content_id: str):
     if content:
         return content
     
-    # Try by numeric ID
-    if content_id.startswith('content-'):
+    # Try by numeric ID (content-123 format)
+    if isinstance(content_id, str) and content_id.startswith('content-'):
         try:
             pk = int(content_id.split('content-')[-1])
             content = Content.query.get(pk)
             if content:
                 return content
-        except Exception:
+        except (ValueError, IndexError):
+            pass
+    
+    # Try plain numeric ID
+    if isinstance(content_id, str):
+        try:
+            pk = int(content_id)
+            content = Content.query.get(pk)
+            if content:
+                return content
+        except ValueError:
             pass
     
     # If external ID (mov-xxx or book-xxx), fetch from API and create with full details
-    if content_id.startswith('mov-'):
+    if isinstance(content_id, str) and content_id.startswith('mov-'):
         ext_data = get_tmdb_movie_details(content_id)
         if ext_data:
             content = Content(
@@ -83,10 +93,10 @@ def _get_or_create_content(content_id: str):
                 cover_url=None
             )
         db.session.add(content)
-        db.session.commit()
+        db.session.flush()
         return content
     
-    elif content_id.startswith('book-'):
+    elif isinstance(content_id, str) and content_id.startswith('book-'):
         ext_data = get_book_details(content_id)
         if ext_data:
             content = Content(
@@ -113,7 +123,7 @@ def _get_or_create_content(content_id: str):
                 cover_url=None
             )
         db.session.add(content)
-        db.session.commit()
+        db.session.flush()
         return content
     
     return None
@@ -390,68 +400,140 @@ def api_explore():
                 if books:
                     sections["Kitaplar"] = books
 
+        # Always search external APIs if a query is provided (even if we have local results)
+        # This ensures users can find and add new content from external sources
+        if query:
+            movie_results = []
+            book_results = []
+            if not content_type or content_type == "film":
+                movie_results = search_tmdb_movies(query, limit=10)
+            if not content_type or content_type == "book":
+                book_results = search_google_books(query, limit=10)
+
+            results_from_external = movie_results + book_results
+
+            # apply year filters on external results (score filter not available externally)
+            filtered_external = []
+            for r in results_from_external:
+                try:
+                    y = int(r.get("year")) if r.get("year") else None
+                except Exception:
+                    y = None
+                if year_min and y and y < int(year_min):
+                    continue
+                if year_max and y and y > int(year_max):
+                    continue
+                # Avoid duplicates with local results
+                ext_id = r.get("external_id")
+                if any(res.get("id") == ext_id or res.get("title").lower() == r.get("title", "").lower() for res in results):
+                    continue
+                filtered_external.append(r)
+
+            # Add external results to results list
+            for r in filtered_external:
+                item = {
+                    "id": r.get("id") or r.get("external_id"),
+                    "title": r.get("title"),
+                    "poster": r.get("poster"),
+                    "year": int(r.get("year")) if r.get("year") else None,
+                    "kind": "film" if r.get("kind") == "film" else "book",
+                    "persisted": False,
+                    "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else ("openlibrary" if (r.get("external_id") or "").startswith("/") else "google_books")),
+                }
+                results.append(item)
+
+            # Rebuild sections with combined results (local + external)
+            if results:
+                films = [r for r in results if r["kind"] == "film"]
+                books = [r for r in results if r["kind"] == "book"]
+                sections = {}
+                if films:
+                    sections["Filmler"] = films
+                if books:
+                    sections["Kitaplar"] = books
+
             return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
 
-        # if the DB returned nothing for the query, try external search
-        # When a user explicitly searches and we don't have matching local results
+        # if the DB returned nothing (either from query or filters), try external search
+        # When a user explicitly searches or filters and we don't have matching local results
         # reach out to external sources (TMDb / Google Books) and ingest matches.
-        if query and not results:
+        if not results and (query or content_type or year_min or year_max or score_min):
             # try TMDb for movies and Google/OpenLibrary for books
+            # honor content type filter when deciding which external providers to call
+            movie_results = []
+            book_results = []
+            if not content_type or content_type == "film":
                 movie_results = search_tmdb_movies(query, limit=10)
+            if not content_type or content_type == "book":
                 book_results = search_google_books(query, limit=10)
-                results_from_external = movie_results + book_results
-                out = []
-                ingest_enabled = os.getenv("INGEST_EXTERNAL_RESULTS", "false").lower() == "true"
-                for r in results_from_external:
-                    if ingest_enabled:
-                        # ingest to DB if opt-in requested
-                        if Content.query.filter_by(external_id=r.get("external_id")).first():
-                            continue
-                        cont = Content(
-                            external_id=r.get("external_id"),
-                            content_type=("movie" if r.get("kind") == "film" else "book"),
-                            title=r.get("title") or "Untitled",
-                            release_year=int(r.get("year")) if r.get("year") else None,
-                            cover_url=r.get("poster") or None,
-                            runtime_minutes=r.get("runtime_minutes"),
-                            page_count=r.get("page_count"),
-                            extra_metadata=r.get("extra"),
-                        )
-                        db.session.add(cont)
-                        db.session.flush()
-                        out.append({
-                            "id": f"content-{cont.id}",
-                            "title": cont.title,
-                            "poster": cont.cover_url,
-                            "year": cont.release_year,
-                            "kind": "film" if cont.content_type == "movie" else "book",
-                            "persisted": True,
-                            "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else "books"),
-                        })
-                    else:
-                        # do not persist search results in DB by default; return mapped items
-                        out.append({
-                            "id": r.get("id") or r.get("external_id"),
-                            "title": r.get("title"),
-                            "poster": r.get("poster"),
-                            "year": int(r.get("year")) if r.get("year") else None,
-                            "kind": "film" if r.get("kind") == "film" else "book",
-                            "persisted": False,
-                            "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else ("openlibrary" if (r.get("external_id") or "").startswith("/") else "google_books")),
-                            "runtime_minutes": r.get("runtime_minutes"),
-                            "page_count": r.get("page_count"),
-                        })
+
+            results_from_external = movie_results + book_results
+
+            # apply year filters on external results (score filter not available externally)
+            filtered_external = []
+            for r in results_from_external:
+                try:
+                    y = int(r.get("year")) if r.get("year") else None
+                except Exception:
+                    y = None
+                if year_min and y and y < int(year_min):
+                    continue
+                if year_max and y and y > int(year_max):
+                    continue
+                filtered_external.append(r)
+
+            out = []
+            ingest_enabled = os.getenv("INGEST_EXTERNAL_RESULTS", "false").lower() == "true"
+            for r in filtered_external:
                 if ingest_enabled:
-                    db.session.commit()
-                if out:
-                    films = [r for r in out if r["kind"] == "film"]
-                    books = [r for r in out if r["kind"] == "book"]
-                    sections = {}
-                    if films:
-                        sections["Filmler"] = films
-                    if books:
-                        sections["Kitaplar"] = books
-                    return jsonify({"items": out, "sections": sections, "query": query, "count": len(out)})
+                    # ingest to DB if opt-in requested
+                    if Content.query.filter_by(external_id=r.get("external_id")).first():
+                        continue
+                    cont = Content(
+                        external_id=r.get("external_id"),
+                        content_type=("movie" if r.get("kind") == "film" else "book"),
+                        title=r.get("title") or "Untitled",
+                        release_year=int(r.get("year")) if r.get("year") else None,
+                        cover_url=r.get("poster") or None,
+                        runtime_minutes=r.get("runtime_minutes"),
+                        page_count=r.get("page_count"),
+                        extra_metadata=r.get("extra"),
+                    )
+                    db.session.add(cont)
+                    db.session.flush()
+                    out.append({
+                        "id": f"content-{cont.id}",
+                        "title": cont.title,
+                        "poster": cont.cover_url,
+                        "year": cont.release_year,
+                        "kind": "film" if cont.content_type == "movie" else "book",
+                        "persisted": True,
+                        "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else "books"),
+                    })
+                else:
+                    # do not persist search results in DB by default; return mapped items
+                    out.append({
+                        "id": r.get("id") or r.get("external_id"),
+                        "title": r.get("title"),
+                        "poster": r.get("poster"),
+                        "year": int(r.get("year")) if r.get("year") else None,
+                        "kind": "film" if r.get("kind") == "film" else "book",
+                        "persisted": False,
+                        "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else ("openlibrary" if (r.get("external_id") or "").startswith("/") else "google_books")),
+                        "runtime_minutes": r.get("runtime_minutes"),
+                        "page_count": r.get("page_count"),
+                    })
+            if ingest_enabled:
+                db.session.commit()
+            if out:
+                films = [r for r in out if r["kind"] == "film"]
+                books = [r for r in out if r["kind"] == "book"]
+                sections = {}
+                if films:
+                    sections["Filmler"] = films
+                if books:
+                    sections["Kitaplar"] = books
+                return jsonify({"items": out, "sections": sections, "query": query, "count": len(out)})
 
     # fallback
     # If DB is small (or empty) and caller provided a query, try external search/ingest
@@ -459,9 +541,22 @@ def api_explore():
         movie_results = search_tmdb_movies(query, limit=10)
         book_results = search_google_books(query, limit=10)
         results_from_external = movie_results + book_results
+        # apply year filters
+        filtered_external = []
+        for r in results_from_external:
+            try:
+                y = int(r.get("year")) if r.get("year") else None
+            except Exception:
+                y = None
+            if year_min and y and y < int(year_min):
+                continue
+            if year_max and y and y > int(year_max):
+                continue
+            filtered_external.append(r)
+
         out = []
         ingest_enabled = os.getenv("INGEST_EXTERNAL_RESULTS", "false").lower() == "true"
-        for r in results_from_external:
+        for r in filtered_external:
             if ingest_enabled:
                 if Content.query.filter_by(external_id=r.get("external_id")).first():
                     continue
@@ -528,6 +623,116 @@ def api_explore():
         results = [item for items in POPULAR_CONTENT.values() for item in items]
 
     return jsonify({"items": results, "sections": sections, "query": query, "count": len(results)})
+
+
+@api_bp.get("/explore/pagination")
+def api_explore_pagination():
+    """Get paginated results for search with offset and limit."""
+    query = request.args.get("q", "").lower()
+    type_filter = request.args.get("type", "").strip()
+    year_min = request.args.get("year_min", "").strip()
+    year_max = request.args.get("year_max", "").strip()
+    score_min = request.args.get("score_min", "").strip()
+    offset = int(request.args.get("offset", "0"))
+    limit = int(request.args.get("limit", "50"))
+    
+    results = []
+    
+    # Search DB content
+    db_count = Content.query.count()
+    if db_count:
+        all_contents = Content.query.all()
+        for c in all_contents:
+            title = (c.title or "").lower()
+            if query and query not in title:
+                continue
+            
+            # Apply content type filter
+            item_kind = "film" if c.content_type == "movie" else "book"
+            if type_filter and type_filter != item_kind:
+                continue
+            
+            # Apply year filter
+            if year_min and c.release_year and c.release_year < int(year_min):
+                continue
+            if year_max and c.release_year and c.release_year > int(year_max):
+                continue
+            
+            # compute average score from ratings
+            avg = None
+            if hasattr(c, "ratings"):
+                scores = [r.score for r in c.ratings]
+                if scores:
+                    avg = sum(scores) / len(scores)
+            
+            # Apply score filter
+            if score_min and (avg is None or avg < float(score_min)):
+                continue
+
+            item = {
+                "id": f"content-{c.id}",
+                "title": c.title,
+                "poster": c.cover_url,
+                "score": round(avg, 1) if avg is not None else None,
+                "year": c.release_year,
+                "kind": item_kind,
+                "persisted": True,
+                "source": "local",
+            }
+            results.append(item)
+    
+    # Search external APIs if query provided
+    if query:
+        movie_results = []
+        book_results = []
+        if not type_filter or type_filter == "film":
+            movie_results = search_tmdb_movies(query, limit=30)
+        if not type_filter or type_filter == "book":
+            book_results = search_google_books(query, limit=30)
+
+        results_from_external = movie_results + book_results
+
+        # apply year filters on external results
+        filtered_external = []
+        for r in results_from_external:
+            try:
+                y = int(r.get("year")) if r.get("year") else None
+            except Exception:
+                y = None
+            if year_min and y and y < int(year_min):
+                continue
+            if year_max and y and y > int(year_max):
+                continue
+            # Avoid duplicates
+            ext_id = r.get("external_id")
+            if any(res.get("id") == ext_id or res.get("title").lower() == r.get("title", "").lower() for res in results):
+                continue
+            filtered_external.append(r)
+
+        # Add external results
+        for r in filtered_external:
+            item = {
+                "id": r.get("id") or r.get("external_id"),
+                "title": r.get("title"),
+                "poster": r.get("poster"),
+                "year": int(r.get("year")) if r.get("year") else None,
+                "kind": "film" if r.get("kind") == "film" else "book",
+                "persisted": False,
+                "source": ("tmdb" if (r.get("external_id") or "").startswith("mov-") else ("openlibrary" if (r.get("external_id") or "").startswith("/") else "google_books")),
+            }
+            results.append(item)
+    
+    # Apply pagination
+    total = len(results)
+    paginated = results[offset:offset + limit]
+    
+    return jsonify({
+        "items": paginated,
+        "offset": offset,
+        "limit": limit,
+        "total": total,
+        "has_more": (offset + limit) < total
+    })
 
 
 @api_bp.get("/admin/db-summary")
@@ -1061,6 +1266,9 @@ def api_get_library_by_status(username: str, status: str):
     
     items = LibraryItem.query.filter_by(user_id=user.id, status=status).order_by(LibraryItem.created_at.desc()).all()
     
+    # Filter out items where content is None (deleted content)
+    valid_items = [item for item in items if item.content is not None]
+    
     return jsonify({
         "status": status,
         "user": {
@@ -1068,7 +1276,7 @@ def api_get_library_by_status(username: str, status: str):
             "name": user.display_name or user.username,
             "avatar": user.avatar_url,
         },
-        "items_count": len(items),
+        "items_count": len(valid_items),
         "items": [
             {
                 "item_id": item.id,
@@ -1077,7 +1285,7 @@ def api_get_library_by_status(username: str, status: str):
                 "year": item.content.release_year,
                 "poster": item.content.cover_url,
                 "kind": item.content.content_type,
-            } for item in items
+            } for item in valid_items
         ],
     })
 
@@ -1209,61 +1417,8 @@ def api_add_list_item(list_id: int):
     if lst.user_id != user.id:
         return jsonify({"message": "forbidden"}), 403
 
-    content = Content.query.filter_by(external_id=content_id).first() or (Content.query.get(int(content_id.split('content-')[-1])) if isinstance(content_id, str) and content_id.startswith('content-') else None)
-    if not content:
-        # Try to ingest from external sources if given external id (TMDb/Books)
-        if isinstance(content_id, str) and content_id.startswith("mov-"):
-            try:
-                ext = get_tmdb_movie_details(content_id)
-                if ext:
-                    extra = ext.get("extra") or {}
-                    # normalize common fields
-                    extra["synopsis"] = ext.get("synopsis") or ext.get("overview")
-                    extra["genres"] = ext.get("genres") or extra.get("genres") or []
-                    extra["directors"] = ext.get("directors") or extra.get("directors") or []
-                    extra["cast"] = ext.get("cast") or extra.get("cast") or []
-                    content = Content(
-                        external_id=ext.get("id"),
-                        content_type="movie",
-                        title=ext.get("title") or "Untitled",
-                        release_year=int(ext.get("year")) if ext.get("year") else None,
-                        cover_url=ext.get("poster"),
-                        runtime_minutes=ext.get("runtime_minutes"),
-                        extra_metadata=extra,
-                    )
-                    db.session.add(content)
-                    db.session.flush()
-            except Exception:
-                content = None
-        elif isinstance(content_id, str) and content_id.startswith("book-"):
-            try:
-                ext = get_book_details(content_id)
-                if ext:
-                    extra = ext.get("extra") or {}
-                    extra["synopsis"] = ext.get("synopsis") or extra.get("synopsis")
-                    extra["genres"] = ext.get("genres") or extra.get("genres") or []
-                    extra["authors"] = ext.get("authors") or extra.get("authors") or []
-                    extra["publishers"] = ext.get("publishers") or extra.get("publishers") or []
-                    content = Content(
-                        external_id=ext.get("id"),
-                        content_type="book",
-                        title=ext.get("title") or "Untitled",
-                        release_year=int(ext.get("year")) if ext.get("year") else None,
-                        cover_url=ext.get("poster"),
-                        page_count=ext.get("page_count"),
-                        extra_metadata=extra,
-                    )
-                    db.session.add(content)
-                    db.session.flush()
-            except Exception:
-                content = None
-        else:
-            # numeric id fallback
-            try:
-                pk = int(content_id)
-                content = Content.query.get(pk)
-            except Exception:
-                content = None
+    # Use the unified _get_or_create_content helper
+    content = _get_or_create_content(content_id)
     if not content:
         return jsonify({"message": "Content not found"}), 404
 
@@ -1287,6 +1442,9 @@ def api_get_list(list_id: int):
     
     items = CustomListItem.query.filter_by(list_id=list_id).order_by(CustomListItem.order_index).all()
     
+    # Filter out items where content is None (deleted content)
+    valid_items = [item for item in items if item.content is not None]
+    
     return jsonify({
         "list": {
             "id": lst.id,
@@ -1297,7 +1455,7 @@ def api_get_list(list_id: int):
                 "name": lst.owner.display_name or lst.owner.username,
                 "avatar": lst.owner.avatar_url,
             },
-            "items_count": len(items),
+            "items_count": len(valid_items),
         },
         "items": [
             {
@@ -1307,7 +1465,7 @@ def api_get_list(list_id: int):
                 "year": it.content.release_year,
                 "poster": it.content.cover_url,
                 "kind": it.content.content_type,
-            } for it in items
+            } for it in valid_items
         ],
     })
 
@@ -1438,6 +1596,9 @@ def api_profile(username: str):
     library_entries = LibraryItem.query.filter_by(user_id=user_obj.id).all()
     tabs = {"watched": [], "watchlist": [], "read": [], "reading_list": []}
     for li in library_entries:
+        # Skip items where content is None (deleted content)
+        if li.content is None:
+            continue
         tabs.setdefault(li.status, []).append(
             {"title": li.content.title, "year": li.content.release_year, "poster": li.content.cover_url}
         )

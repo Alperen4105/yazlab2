@@ -168,10 +168,25 @@ def reset_password():
 @app.route("/explore")
 def explore():
     query = request.args.get("q", "").strip()
+    type_filter = request.args.get("type", "").strip()
+    year_min = request.args.get("year_min", "").strip()
+    year_max = request.args.get("year_max", "").strip()
+    score_min = request.args.get("score_min", "").strip()
+    
+    query_params = {"q": query}
+    if type_filter:
+        query_params["type"] = type_filter
+    if year_min:
+        query_params["year_min"] = year_min
+    if year_max:
+        query_params["year_max"] = year_max
+    if score_min:
+        query_params["score_min"] = score_min
+    
     payload, status = api_request(
         "get",
         "/api/explore",
-        query_string={"q": query},
+        query_string=query_params,
     )
     if status != 200:
         abort(status)

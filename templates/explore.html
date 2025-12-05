@@ -7,7 +7,7 @@
       Binlerce film ve kitap arasından istediğini bul. Filtrele, keşfet, listene ekle.
     </p>
   </div>
-  <form class="search-form" method="get">
+  <form class="search-form" method="get" id="exploreForm">
     <input
       type="search"
       name="q"
@@ -19,12 +19,10 @@
 </section>
 
 <section class="filters-panel">
-  <form method="get" class="filters-form">
-    <input type="hidden" name="q" value="{{ query }}" />
-    
+  <div class="filters-form">
     <div class="filter-group">
       <label for="type">Tür</label>
-      <select name="type" id="type">
+      <select name="type" id="type" form="exploreForm">
         <option value="">Tümü</option>
         <option value="film" {{ 'selected' if request.args.get('type') == 'film' }}>Filmler</option>
         <option value="book" {{ 'selected' if request.args.get('type') == 'book' }}>Kitaplar</option>
@@ -33,24 +31,123 @@
 
     <div class="filter-group">
       <label for="year_min">Yıl (Min)</label>
-      <input type="number" name="year_min" id="year_min" value="{{ request.args.get('year_min', '') }}" placeholder="1990" min="1900" max="2025" />
+      <input type="number" name="year_min" id="year_min" form="exploreForm" value="{{ request.args.get('year_min', '') }}" placeholder="1990" min="1900" max="2025" />
     </div>
 
     <div class="filter-group">
       <label for="year_max">Yıl (Max)</label>
-      <input type="number" name="year_max" id="year_max" value="{{ request.args.get('year_max', '') }}" placeholder="2025" min="1900" max="2025" />
+      <input type="number" name="year_max" id="year_max" form="exploreForm" value="{{ request.args.get('year_max', '') }}" placeholder="2025" min="1900" max="2025" />
     </div>
 
     <div class="filter-group">
       <label for="score_min">Min. Puan</label>
-      <input type="number" name="score_min" id="score_min" value="{{ request.args.get('score_min', '') }}" placeholder="7.0" min="0" max="10" step="0.1" />
+      <input type="number" name="score_min" id="score_min" form="exploreForm" value="{{ request.args.get('score_min', '') }}" placeholder="7.0" min="0" max="10" step="0.1" />
     </div>
-
-    <button type="submit" class="filter-btn">Filtrele</button>
+    
     <a href="{{ url_for('explore') }}" class="filter-reset">Temizle</a>
-  </form>
+  </div>
+
+  <style>
+    .filters-panel {
+      padding: 1.5rem;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+    }
+
+    .filters-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      align-items: flex-end;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .filter-group label {
+      font-weight: 500;
+      font-size: 0.875rem;
+      color: #0f172a;
+    }
+
+    .filter-group select,
+    .filter-group input {
+      padding: 0.75rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      background: white;
+      color: #0f172a;
+      font-family: inherit;
+    }
+
+    .filter-group select:hover,
+    .filter-group input:hover {
+      border-color: #cbd5f5;
+    }
+
+    .filter-group select:focus,
+    .filter-group input:focus {
+      outline: none;
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.1);
+    }
+
+    .filter-reset {
+      padding: 0.75rem 1.5rem;
+      background: #475569;
+      color: white;
+      border-radius: 6px;
+      text-decoration: none;
+      text-align: center;
+      transition: background 0.3s ease;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+    }
+
+    .filter-reset:hover {
+      background: #334155;
+    }
+
+    @media (max-width: 768px) {
+      .filters-form {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 0.75rem;
+      }
+
+      .filter-group select,
+      .filter-group input {
+        padding: 0.6rem;
+        font-size: 0.8rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .filters-panel {
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .filters-form {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+      }
+
+      .filter-reset {
+        width: 100%;
+      }
+    }
+  </style>
 </section>
 
+<div id="sections-container">
 {% for section, items in sections.items() %}
 <section class="carousel">
   <div class="section-heading">
@@ -102,4 +199,268 @@
 <section class="empty-state">
   <p class="muted">{% if query %}Arama için sonuç bulunamadı.{% else %}Henüz içerik yok. Arama yaparak ekleyebilirsin.{% endif %}</p>
 </section>
-{% endfor %} {% endblock %}
+{% endfor %}
+</div>
+</div>
+
+<div id="load-more-container" style="text-align: center; padding: 2rem; margin-top: 2rem;">
+  <button id="load-more-btn" class="load-more-btn">Daha Fazla</button>
+  <p id="no-more-text" class="muted" style="display: none; margin-top: 1rem;">Daha fazla içerik yok.</p>
+  <p id="loading-text" class="muted" style="display: none; margin-top: 1rem;">Yükleniyor...</p>
+</div>
+
+<style>
+  #load-more-container {
+    margin-top: 2rem;
+  }
+  
+  .load-more-btn {
+    padding: 0.75rem 2rem;
+    background-color: #0ea5e9;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: background-color 0.3s ease;
+    font-family: inherit;
+  }
+  
+  .load-more-btn:hover {
+    background-color: #0284c7;
+  }
+  
+  .load-more-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
+
+<script>
+  let isLoading = false;
+  let hasMore = true;
+  let currentOffset = 0;
+  
+  // Get search parameters
+  const searchParams = new URLSearchParams(window.location.search);
+  const query = searchParams.get('q') || '';
+  const type = searchParams.get('type') || '';
+  const yearMin = searchParams.get('year_min') || '';
+  const yearMax = searchParams.get('year_max') || '';
+  const scoreMin = searchParams.get('score_min') || '';
+  
+  // Count initial items displayed
+  function countInitialItems() {
+    let total = 0;
+    document.querySelectorAll('.card-row').forEach(row => {
+      total += row.children.length;
+    });
+    return total;
+  }
+  
+  currentOffset = countInitialItems();
+  
+  // Only show load more button if we have a search query
+  if (!query) {
+    document.getElementById('load-more-btn').style.display = 'none';
+  }
+  
+  // Load More button click handler
+  document.getElementById('load-more-btn').addEventListener('click', loadMoreItems);
+  
+  async function loadMoreItems() {
+    if (isLoading || !hasMore) return;
+    
+    isLoading = true;
+    document.getElementById('load-more-btn').style.display = 'none';
+    document.getElementById('loading-text').style.display = 'block';
+    
+    try {
+      const params = new URLSearchParams();
+      if (query) params.append('q', query);
+      if (type) params.append('type', type);
+      if (yearMin) params.append('year_min', yearMin);
+      if (yearMax) params.append('year_max', yearMax);
+      if (scoreMin) params.append('score_min', scoreMin);
+      params.append('offset', currentOffset);
+      params.append('limit', '50');
+      
+      const response = await fetch(`/api/explore/pagination?${params.toString()}`);
+      const data = await response.json();
+      
+      if (!data.items || data.items.length === 0) {
+        hasMore = false;
+        document.getElementById('load-more-btn').style.display = 'none';
+        document.getElementById('loading-text').style.display = 'none';
+        document.getElementById('no-more-text').style.display = 'block';
+        return;
+      }
+      
+      // Group items by type
+      const filmItems = data.items.filter(item => item.kind === 'film');
+      const bookItems = data.items.filter(item => item.kind === 'book');
+      
+      // Add films to Filmler section
+      if (filmItems.length > 0) {
+        // Find the Filmler card-row by checking section content
+        let filmRow = null;
+        document.querySelectorAll('section.carousel').forEach(section => {
+          const heading = section.querySelector('h2');
+          if (heading && heading.textContent.trim() === 'Filmler') {
+            filmRow = section.querySelector('.card-row');
+          }
+        });
+        
+        if (filmRow) {
+          filmItems.forEach(item => {
+            const card = createContentCard(item);
+            filmRow.appendChild(card);
+          });
+        } else {
+          console.log('Filmler section not found, creating it');
+          const container = document.getElementById('sections-container');
+          const section = document.createElement('section');
+          section.className = 'carousel';
+          section.innerHTML = `
+            <div class="section-heading">
+              <div>
+                <h2>Filmler</h2>
+                <p class="muted">${filmItems.length} içerik</p>
+              </div>
+            </div>
+            <div class="card-row"></div>
+          `;
+          container.appendChild(section);
+          filmRow = section.querySelector('.card-row');
+          filmItems.forEach(item => {
+            const card = createContentCard(item);
+            filmRow.appendChild(card);
+          });
+        }
+      }
+      
+      // Add books to Kitaplar section
+      if (bookItems.length > 0) {
+        // Find the Kitaplar card-row by checking section content
+        let bookRow = null;
+        document.querySelectorAll('section.carousel').forEach(section => {
+          const heading = section.querySelector('h2');
+          if (heading && heading.textContent.trim() === 'Kitaplar') {
+            bookRow = section.querySelector('.card-row');
+            console.log('Found Kitaplar section');
+          }
+        });
+        
+        if (bookRow) {
+          console.log('Appending books to existing section');
+          bookItems.forEach(item => {
+            const card = createContentCard(item);
+            bookRow.appendChild(card);
+          });
+        } else {
+          console.log('Kitaplar section not found, creating it');
+          const container = document.getElementById('sections-container');
+          const section = document.createElement('section');
+          section.className = 'carousel';
+          section.innerHTML = `
+            <div class="section-heading">
+              <div>
+                <h2>Kitaplar</h2>
+                <p class="muted">${bookItems.length} içerik</p>
+              </div>
+            </div>
+            <div class="card-row"></div>
+          `;
+          container.appendChild(section);
+          bookRow = section.querySelector('.card-row');
+          bookItems.forEach(item => {
+            const card = createContentCard(item);
+            bookRow.appendChild(card);
+          });
+        }
+      }
+      
+      // Update offset and has_more flag
+      currentOffset += data.items.length;
+      hasMore = data.has_more;
+      
+      // Show/hide button based on has_more
+      if (hasMore) {
+        document.getElementById('load-more-btn').style.display = 'block';
+        document.getElementById('loading-text').style.display = 'none';
+      } else {
+        document.getElementById('load-more-btn').style.display = 'none';
+        document.getElementById('loading-text').style.display = 'none';
+        document.getElementById('no-more-text').style.display = 'block';
+      }
+      
+    } catch (error) {
+      console.error('Error loading more items:', error);
+      document.getElementById('load-more-btn').style.display = 'block';
+      document.getElementById('loading-text').style.display = 'none';
+    } finally {
+      isLoading = false;
+    }
+  }
+  
+  function createContentCard(item) {
+    const article = document.createElement('article');
+    article.className = 'content-card';
+    
+    const posterUrl = item.poster || '{{ url_for("static", filename="placeholder-content.svg") }}';
+    const contentType = item.kind === 'film' ? 'FİLM' : 'KİTAP';
+    
+    const badgeHtml = !item.persisted ? `<span class="badge external">Canlı — ${(item.source || '').replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</span>` : '';
+    
+    let metaHtml = '';
+    if (item.score) {
+      metaHtml += `<span class="score">⭐ ${item.score}/10</span>`;
+    }
+    if (item.num_ratings) {
+      metaHtml += `<span class="badge small">${item.num_ratings} oy</span>`;
+    }
+    if (item.review_count) {
+      metaHtml += `<span class="badge small">${item.review_count} yorum</span>`;
+    }
+    
+    const detailUrl = `/content/${item.kind}/${item.id}`;
+    
+    article.innerHTML = `
+      <img src="${posterUrl}" alt="${item.title}" />
+      <div class="card-info">
+        ${badgeHtml}
+        <p class="content-type-badge">${contentType}</p>
+        <h3>${item.title}</h3>
+        ${item.year ? `<p class="muted small">${item.year}</p>` : ''}
+        <div class="meta-row">
+          ${metaHtml}
+        </div>
+        <a class="detail-link" href="${detailUrl}">Detaylar →</a>
+      </div>
+    `;
+    
+    return article;
+  }
+</script>
+
+<script>
+  // When any filter changes, update the form and optionally auto-submit
+  const filterInputs = document.querySelectorAll('#type, #year_min, #year_max, #score_min');
+  const exploreForm = document.getElementById('exploreForm');
+
+  filterInputs.forEach(input => {
+    input.addEventListener('change', () => {
+      // Submit the form when a filter changes
+      exploreForm.submit();
+    });
+  });
+
+  // When search form is submitted, ensure filters are included
+  exploreForm.addEventListener('submit', (e) => {
+    // The filters are already connected via form="exploreForm" attribute
+    // so they will be automatically included in the form submission
+  });
+</script>
+
+{% endblock %}
