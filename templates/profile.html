@@ -26,7 +26,9 @@ message in messages %}
     <div class="actions">
       {% if current_user and current_user.username == profile.username %}
       <button class="primary" onclick="openEditModal()">Profili Düzenle</button>
-      <button class="ghost" onclick="openListModal()">Yeni Özel Liste Oluştur</button>
+      <button class="ghost" onclick="openListModal()">
+        Yeni Özel Liste Oluştur
+      </button>
       {% else %} {% if current_user %} {% if is_following %}
       <form
         method="post"
@@ -59,7 +61,14 @@ message in messages %}
       <h2>{{ profile.name }}'in listeleri</h2>
     </div>
   </div>
-  <div id="listsGrid" class="tab-grid"></div>
+  <div
+    id="listsGrid"
+    style="
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+    "
+  ></div>
 </section>
 
 <section class="library-tabs">
@@ -191,8 +200,20 @@ message in messages %}
 
   // List create modal
   function openListModal() {
-    const title = prompt("Liste başlığı:");
-    if (!title) return;
+    document.getElementById("createListModal").classList.add("active");
+  }
+
+  function closeListModal() {
+    document.getElementById("createListModal").classList.remove("active");
+  }
+
+  function createNewList() {
+    const title = document.getElementById("listTitle").value.trim();
+    if (!title) {
+      alert("Liste başlığı boş olamaz");
+      return;
+    }
+
     fetch('/api/lists', {
       method: 'POST',
       headers: {
@@ -211,13 +232,54 @@ message in messages %}
     }).then(d => {
       if (d.id) {
         loadLists();
-        alert('Liste oluşturuldu');
+        closeListModal();
+        document.getElementById("listTitle").value = '';
+        // Show success message
+        const msg = document.createElement('div');
+        msg.className = 'alert success';
+        msg.textContent = 'Liste oluşturuldu';
+        msg.style.position = 'fixed';
+        msg.style.top = '20px';
+        msg.style.right = '20px';
+        msg.style.zIndex = '9999';
+        document.body.appendChild(msg);
+        setTimeout(() => msg.remove(), 3000);
       } else {
         alert(d.message || 'Oluşturulamadı');
       }
     }).catch(err => {
       alert(err.message);
     });
+  }
+
+  // Initialize modal event listeners when DOM is ready
+  function initializeModalListeners() {
+    const modal = document.getElementById("createListModal");
+    if (modal) {
+      // Close modal when clicking outside
+      modal.addEventListener("click", function (e) {
+        if (e.target === this) {
+          closeListModal();
+        }
+      });
+    }
+
+    // Close modal with Escape key
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        closeListModal();
+      }
+    });
+
+    // Allow Enter key to submit
+    const listTitleInput = document.getElementById("listTitle");
+    if (listTitleInput) {
+      listTitleInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          createNewList();
+        }
+      });
+    }
   }
 
   function loadLists() {
@@ -232,25 +294,83 @@ message in messages %}
       .then(data => {
         const grid = document.getElementById('listsGrid');
         grid.innerHTML = '';
+
+        if (!data.lists || data.lists.length === 0) {
+          grid.innerHTML = '<p class="muted">Henüz özel liste yok</p>';
+          return;
+        }
+
         (data.lists || []).forEach(lst => {
           const items = (lst.preview || []).map(it => `
             <img src="${it.poster || '/static/placeholder-content.svg'}" alt="${it.title}" style="width:56px;height:84px;border-radius:8px;object-fit:cover" />
           `).join('');
           grid.insertAdjacentHTML('beforeend', `
-            <article>
-              <h3>${lst.title}</h3>
-              <div style="display:flex;gap:0.5rem;">${items}</div>
-              <p class="muted" style="margin-top:0.5rem">${lst.items_count} içerik</p>
-            </article>
+            <a href="/list/${lst.id}" style="text-decoration:none;color:inherit;">
+              <article style="background:white;border:1px solid #e2e8f0;border-radius:18px;padding:1.5rem;transition:all 0.2s ease;cursor:pointer;">
+                <article style="display:flex;gap:0.5rem;margin-bottom:1rem;min-height:100px;">
+                  ${items || '<p class="muted">İçerik yok</p>'}
+                </article>
+                <h3 style="margin:0 0 0.5rem 0;font-size:1rem;">${lst.title}</h3>
+                <p class="muted" style="margin:0;font-size:0.875rem">${lst.items_count} içerik</p>
+              </article>
+            </a>
           `);
         });
+        // Add hover effect via CSS
+        if (data.lists.length > 0) {
+          document.querySelectorAll('#listsGrid a').forEach(a => {
+            a.addEventListener('mouseover', function() {
+              this.querySelector('article').style.boxShadow = '0 8px 20px rgba(15, 23, 42, 0.12)';
+            });
+            a.addEventListener('mouseout', function() {
+              this.querySelector('article').style.boxShadow = 'none';
+            });
+          });
+        }
       })
       .catch(err => {
         const grid = document.getElementById('listsGrid');
-        grid.innerHTML = `<p class="muted">Listeler yüklenemedi: ${err.message}</p>`;
+        grid.innerHTML = `<p class="muted">Listeler yüklenemedi</p>`;
       });
   }
 
-  loadLists();
+  // Load lists when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      loadLists();
+      initializeModalListeners();
+    });
+  } else {
+    loadLists();
+    initializeModalListeners();
+  }
 </script>
+
+<!-- Create List Modal -->
+<div id="createListModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Yeni Özel Liste Oluştur</h2>
+      <button class="modal-close" onclick="closeListModal()">&times;</button>
+    </div>
+    <div class="form-group">
+      <label for="listTitle">Liste Başlığı</label>
+      <input
+        type="text"
+        id="listTitle"
+        name="listTitle"
+        placeholder="Liste için bir ad girin..."
+        autofocus
+      />
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="primary" onclick="createNewList()">
+        Oluştur
+      </button>
+      <button type="button" class="ghost" onclick="closeListModal()">
+        İptal
+      </button>
+    </div>
+  </div>
+</div>
 {% endblock %}

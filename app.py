@@ -301,6 +301,28 @@ def content_detail(content_type: str, content_id: str):
     )
 
 
+@app.route("/list/<int:list_id>")
+def view_list(list_id: int):
+    """Display a custom list with all its items"""
+    headers = None
+    auth = session.get("auth", {})
+    access = auth.get("access_token")
+    if access:
+        headers = {"Authorization": f"Bearer {access}"}
+    
+    payload, status = api_request("get", f"/api/lists/{list_id}", headers=headers)
+    if status == 404:
+        abort(404)
+    if status != 200:
+        abort(status)
+    
+    return render_template(
+        "list.html",
+        list=payload.get("list"),
+        items=payload.get("items", []),
+    )
+
+
 @app.route("/profile/<username>")
 def profile(username: str):
     headers = None

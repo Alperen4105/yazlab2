@@ -1221,6 +1221,39 @@ def api_add_list_item(list_id: int):
     return jsonify({"id": cli.id, "content_id": content.id}), 201
 
 
+@api_bp.get("/lists/<int:list_id>")
+def api_get_list(list_id: int):
+    """Get a single list with all its items"""
+    lst = CustomList.query.get(list_id)
+    if not lst:
+        return jsonify({"message": "List not found"}), 404
+    
+    items = CustomListItem.query.filter_by(list_id=list_id).order_by(CustomListItem.order_index).all()
+    
+    return jsonify({
+        "list": {
+            "id": lst.id,
+            "title": lst.title,
+            "description": lst.description,
+            "owner": {
+                "username": lst.owner.username,
+                "name": lst.owner.display_name or lst.owner.username,
+                "avatar": lst.owner.avatar_url,
+            },
+            "items_count": len(items),
+        },
+        "items": [
+            {
+                "id": it.content.id,
+                "title": it.content.title,
+                "year": it.content.release_year,
+                "poster": it.content.cover_url,
+                "kind": "film" if it.content.content_type == "movie" else "book",
+            } for it in items
+        ],
+    })
+
+
 @api_bp.delete("/lists/<int:list_id>")
 @jwt_required()
 def api_delete_list(list_id: int):

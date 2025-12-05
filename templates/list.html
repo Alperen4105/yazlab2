@@ -1,0 +1,81 @@
+{% extends "base.html" %} {% block content %}
+<section class="explore-hero">
+  <div>
+    <p class="eyebrow">Özel Liste</p>
+    <h1>{{ list.title }}</h1>
+    {% if list.description %}
+    <p>{{ list.description }}</p>
+    {% endif %}
+    <div class="meta">
+      <span>
+        <a
+          href="{{ url_for('profile', username=list.owner.username) }}"
+          style="
+            text-decoration: none;
+            color: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+          "
+        >
+          <img
+            src="{{ list.owner.avatar or url_for('static', filename='default-avatar.svg') }}"
+            alt="{{ list.owner.name }}"
+            style="
+              width: 32px;
+              height: 32px;
+              border-radius: 50%;
+              object-fit: cover;
+            "
+          />
+          <strong>{{ list.owner.name }}</strong>
+        </a>
+      </span>
+      <span>{{ list.items_count }} içerik</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">İçerik</p>
+      <h2>Listedeki Filmler ve Kitaplar</h2>
+    </div>
+  </div>
+
+  {% if items %}
+  <div
+    style="
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1.5rem;
+    "
+  >
+    {% for item in items %}
+    <a
+      href="{{ url_for('content_detail', content_type=item.kind, content_id=item.id) }}"
+      style="text-decoration: none; color: inherit"
+    >
+      <article class="content-card">
+        <img
+          src="{{ item.poster or url_for('static', filename='placeholder-content.svg') }}"
+          alt="{{ item.title }}"
+        />
+        <div>
+          <h3 style="font-size: 0.95rem; margin: 0.5rem 0 0.25rem">
+            {{ item.title }}
+          </h3>
+          <p class="muted" style="font-size: 0.85rem; margin: 0">
+            {{ item.year }}
+          </p>
+        </div>
+      </article>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Bu liste henüz hiç içerik içermiyor.</p>
+  {% endif %}
+</section>
+{% endblock %}
