@@ -145,7 +145,20 @@ def _humanize_ts(dt):
     try:
         if not dt:
             return None
-        now = datetime.now(dt.tzinfo) if hasattr(dt, 'tzinfo') and dt.tzinfo else datetime.now()
+        # Use Turkey timezone (pytz for proper DST handling)
+        import pytz
+        turkey_tz = pytz.timezone('Europe/Istanbul')
+        
+        # Get current time in Turkey timezone
+        now = datetime.now(turkey_tz)
+        
+        # Convert dt to turkey timezone if it has timezone info
+        if hasattr(dt, 'tzinfo') and dt.tzinfo:
+            dt = dt.astimezone(turkey_tz)
+        else:
+            # If naive datetime, assume UTC and convert to Turkey timezone
+            dt = pytz.UTC.localize(dt).astimezone(turkey_tz)
+        
         diff = now - dt
         secs = int(diff.total_seconds())
         if secs < 60:
@@ -160,6 +173,59 @@ def _humanize_ts(dt):
         return f"{days} gün önce"
     except Exception:
         return None
+
+
+def _get_featured_lists(limit: int = 3):
+    """Fetch top N lists ordered by number of items in each list."""
+    try:
+        top_lists = (
+            CustomList.query
+            .join(CustomListItem)
+            .with_entities(CustomList, func.count(CustomListItem.id).label('item_count'))
+            .group_by(CustomList.id)
+            .order_by(func.count(CustomListItem.id).desc())
+            .limit(limit)
+            .all()
+        )
+        
+        result = []
+        for list_obj, item_count in top_lists:
+            result.append({
+                "id": list_obj.id,
+                "title": list_obj.title,
+                "owner": list_obj.owner.display_name or list_obj.owner.username,
+                "items_count": item_count,
+            })
+        return result
+    except Exception:
+        return []
+
+
+def _get_featured_users(limit: int = 3):
+    """Fetch top N users ordered by number of followers."""
+    try:
+        top_users = (
+            User.query
+            .outerjoin(Follow, Follow.followed_id == User.id)
+            .with_entities(User, func.count(Follow.follower_id).label('follower_count'))
+            .group_by(User.id)
+            .order_by(func.count(Follow.follower_id).desc())
+            .limit(limit)
+            .all()
+        )
+        
+        result = []
+        for user_obj, follower_count in top_users:
+            result.append({
+                "id": user_obj.id,
+                "username": user_obj.username,
+                "name": user_obj.display_name or user_obj.username,
+                "avatar": user_obj.avatar_url,
+                "followers_count": follower_count,
+            })
+        return result
+    except Exception:
+        return []
 
 
 @api_bp.get("/feed")
@@ -246,8 +312,8 @@ def api_feed():
     # If DB is empty fallback to sample data
     if total == 0:
         payload = _paginate(FEED_ACTIVITIES, page, per_page)
-        payload["featured_lists"] = FEATURED_LISTS
-        payload["featured_users"] = FEATURED_USERS
+        payload["featured_lists"] = _get_featured_lists()
+        payload["featured_users"] = _get_featured_users()
     else:
         payload = {
             "items": items,
@@ -255,8 +321,8 @@ def api_feed():
             "per_page": per_page,
             "has_more": (start + per_page) < total,
             "total": total,
-            "featured_lists": FEATURED_LISTS,
-            "featured_users": FEATURED_USERS,
+            "featured_lists": _get_featured_lists(),
+            "featured_users": _get_featured_users(),
         }
     return jsonify(payload)
 
@@ -1587,7 +1653,7 @@ def api_profile(username: str):
             {
                 "profile": user,
                 "library": LIBRARY_TABS,
-                "featured_lists": FEATURED_LISTS,
+                "featured_lists": _get_featured_lists(),
                 "recent_activities": FEED_ACTIVITIES[:5],
             }
         )
@@ -1660,7 +1726,7 @@ def api_profile(username: str):
         {
             "profile": profile,
             "library": tabs,
-            "featured_lists": FEATURED_LISTS,
+            "featured_lists": _get_featured_lists(),
             "recent_activities": recent_items,
             "is_following": is_following,
         }
