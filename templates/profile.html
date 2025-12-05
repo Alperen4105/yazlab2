@@ -75,27 +75,68 @@ message in messages %}
   <div class="section-heading">
     <div>
       <p class="eyebrow">Kütüphane</p>
-      <h2>Sezgisel sekmeli yapı</h2>
+      <h2>{{ profile.name }}'in kütüphanesi</h2>
     </div>
   </div>
-  <div class="tab-grid">
+  <div
+    style="
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+    "
+  >
     {% for tab, items in library_tabs.items() %}
-    <article>
-      <h3>{{ tab | replace("_", " ") | title }}</h3>
-      <div class="mini-grid">
-        {% for item in items %}
-        <figure>
+    <a
+      href="{{ url_for('view_library', username=profile.username, status=tab) }}"
+      style="text-decoration: none; color: inherit; display: block"
+    >
+      <article
+        style="
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 18px;
+          padding: 1.5rem;
+          transition: all 0.2s ease;
+        "
+        onmouseover="this.style.boxShadow='0 8px 20px rgba(15, 23, 42, 0.12)'"
+        onmouseout="this.style.boxShadow='none'"
+      >
+        <h3 style="margin: 0 0 1rem 0; font-size: 1rem">
+          {{ tab | replace("_", " ") | title }}
+        </h3>
+        <div
+          style="
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            min-height: 100px;
+          "
+        >
+          {% for item in items[:4] %}
           <img
             src="{{ item.poster or url_for('static', filename='placeholder-content.svg') }}"
             alt="{{ item.title }}"
+            style="
+              width: 100%;
+              aspect-ratio: 2/3;
+              border-radius: 8px;
+              object-fit: cover;
+            "
+            title="{{ item.title }}"
           />
-          <figcaption>{{ item.title }}</figcaption>
-        </figure>
-        {% else %}
-        <p class="muted">Liste boş</p>
-        {% endfor %}
-      </div>
-    </article>
+          {% else %}
+          <p class="muted" style="margin: 0">Liste boş</p>
+          {% endfor %}
+        </div>
+        <p class="muted" style="margin: 0; font-size: 0.875rem">
+          {{ items|length }} içerik
+        </p>
+      </article>
+    </a>
     {% endfor %}
   </div>
 </section>
@@ -282,6 +323,39 @@ message in messages %}
     }
   }
 
+  function deleteList(listId, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!confirm('Bu listeyi silmek istediğinizden emin misiniz?')) {
+      return;
+    }
+    fetch(`/api/lists/${listId}`, {
+      method: 'DELETE',
+      headers: {
+        {% if access_token %}'Authorization': 'Bearer {{ access_token }}'{% endif %}
+      }
+    }).then(async r => {
+      if (!r.ok) {
+        const text = await r.text();
+        throw new Error(`Hata ${r.status}: ${text}`);
+      }
+      return r.json();
+    }).then(() => {
+      loadLists();
+      const msg = document.createElement('div');
+      msg.className = 'alert success';
+      msg.textContent = 'Liste silindi';
+      msg.style.position = 'fixed';
+      msg.style.top = '20px';
+      msg.style.right = '20px';
+      msg.style.zIndex = '9999';
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 3000);
+    }).catch(err => {
+      alert('Liste silinemedi: ' + err.message);
+    });
+  }
+
   function loadLists() {
     fetch('/api/users/{{ profile.username }}/lists')
       .then(async r => {
@@ -304,16 +378,22 @@ message in messages %}
           const items = (lst.preview || []).map(it => `
             <img src="${it.poster || '/static/placeholder-content.svg'}" alt="${it.title}" style="width:56px;height:84px;border-radius:8px;object-fit:cover" />
           `).join('');
+          const deleteBtn = {% if current_user and current_user.username == profile.username %}`
+            <button onclick="deleteList(${lst.id}, event)" style="position:absolute;top:0.75rem;right:0.75rem;background:rgba(251, 251, 251, 0.9);color:white;border:none;border-radius:8px;padding:0.5rem 0.75rem;font-size:0.875rem;cursor:pointer;transition:all 0.2s ease;" onmouseover="this.style.background='rgb(220,38,38)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.9)'">🗑️</button>
+          `{% else %}''{% endif %};
           grid.insertAdjacentHTML('beforeend', `
-            <a href="/list/${lst.id}" style="text-decoration:none;color:inherit;">
-              <article style="background:white;border:1px solid #e2e8f0;border-radius:18px;padding:1.5rem;transition:all 0.2s ease;cursor:pointer;">
-                <article style="display:flex;gap:0.5rem;margin-bottom:1rem;min-height:100px;">
-                  ${items || '<p class="muted">İçerik yok</p>'}
+            <div style="position:relative;">
+              <a href="/list/${lst.id}" style="text-decoration:none;color:inherit;display:block;">
+                <article style="background:white;border:1px solid #e2e8f0;border-radius:18px;padding:1.5rem;transition:all 0.2s ease;cursor:pointer;">
+                  <article style="display:flex;gap:0.5rem;margin-bottom:1rem;min-height:100px;">
+                    ${items || '<p class="muted">İçerik yok</p>'}
+                  </article>
+                  <h3 style="margin:0 0 0.5rem 0;font-size:1rem;">${lst.title}</h3>
+                  <p class="muted" style="margin:0;font-size:0.875rem">${lst.items_count} içerik</p>
                 </article>
-                <h3 style="margin:0 0 0.5rem 0;font-size:1rem;">${lst.title}</h3>
-                <p class="muted" style="margin:0;font-size:0.875rem">${lst.items_count} içerik</p>
-              </article>
-            </a>
+              </a>
+              ${deleteBtn}
+            </div>
           `);
         });
         // Add hover effect via CSS

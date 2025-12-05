@@ -316,10 +316,53 @@ def view_list(list_id: int):
     if status != 200:
         abort(status)
     
+    # Get current user info
+    current = auth.get("user")
+    
     return render_template(
         "list.html",
         list=payload.get("list"),
         items=payload.get("items", []),
+        current_user=current,
+        access_token=access,
+    )
+
+
+@app.route("/library/<username>/<status>")
+def view_library(username: str, status: str):
+    """Display a user's library items by status"""
+    headers = None
+    auth = session.get("auth", {})
+    access = auth.get("access_token")
+    if access:
+        headers = {"Authorization": f"Bearer {access}"}
+    
+    payload, status_code = api_request("get", f"/api/users/{username}/library/{status}", headers=headers)
+    if status_code == 404:
+        abort(404)
+    if status_code != 200:
+        abort(status_code)
+    
+    # Get current user info
+    current = auth.get("user")
+    
+    # Map status to display names
+    status_names = {
+        "watched": "İzlenenler",
+        "watchlist": "İzlenecekler",
+        "read": "Okunanlar",
+        "reading_list": "Okunacaklar"
+    }
+    
+    return render_template(
+        "library.html",
+        status=payload.get("status"),
+        status_name=status_names.get(payload.get("status"), payload.get("status")),
+        user_info=payload.get("user"),
+        items=payload.get("items", []),
+        items_count=payload.get("items_count", 0),
+        current_user=current,
+        access_token=access,
     )
 
 

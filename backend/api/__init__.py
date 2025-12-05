@@ -1047,6 +1047,63 @@ def api_remove_review_reaction(review_id: int):
     return jsonify({"message": "reaction removed"})
 
 
+@api_bp.get("/users/<username>/library/<status>")
+def api_get_library_by_status(username: str, status: str):
+    """Get user's library items by status (watched, watchlist, read, reading_list)"""
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    
+    # Validate status
+    valid_statuses = ["watched", "watchlist", "read", "reading_list"]
+    if status not in valid_statuses:
+        return jsonify({"message": "Invalid status"}), 400
+    
+    items = LibraryItem.query.filter_by(user_id=user.id, status=status).order_by(LibraryItem.created_at.desc()).all()
+    
+    return jsonify({
+        "status": status,
+        "user": {
+            "username": user.username,
+            "name": user.display_name or user.username,
+            "avatar": user.avatar_url,
+        },
+        "items_count": len(items),
+        "items": [
+            {
+                "item_id": item.id,
+                "id": f"content-{item.content.id}",
+                "title": item.content.title,
+                "year": item.content.release_year,
+                "poster": item.content.cover_url,
+                "kind": item.content.content_type,
+            } for item in items
+        ],
+    })
+
+
+@api_bp.delete("/library/<int:item_id>")
+@jwt_required()
+def api_delete_library_item_by_id(item_id: int):
+    """Remove a library item by its ID"""
+    identity = get_jwt_identity()
+    try:
+        identity = int(identity)
+    except Exception:
+        pass
+    user = User.query.get(identity)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    item = LibraryItem.query.get(item_id)
+    if not item or item.user_id != user.id:
+        return jsonify({"message": "not found"}), 404
+
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({"message": "removed"})
+
+
 @api_bp.post("/content/<content_id>/library")
 @jwt_required()
 def api_add_library_item(content_id: str):
@@ -1244,14 +1301,43 @@ def api_get_list(list_id: int):
         },
         "items": [
             {
-                "id": it.content.id,
+                "item_id": it.id,
+                "id": f"content-{it.content.id}",
                 "title": it.content.title,
                 "year": it.content.release_year,
                 "poster": it.content.cover_url,
-                "kind": "film" if it.content.content_type == "movie" else "book",
+                "kind": it.content.content_type,
             } for it in items
         ],
     })
+
+
+@api_bp.delete("/lists/<int:list_id>/items/<int:item_id>")
+@jwt_required()
+def api_delete_list_item(list_id: int, item_id: int):
+    """Remove an item from a custom list"""
+    identity = get_jwt_identity()
+    try:
+        identity = int(identity)
+    except Exception:
+        pass
+    user = User.query.get(identity)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    lst = CustomList.query.get(list_id)
+    if not lst:
+        return jsonify({"message": "list not found"}), 404
+    if lst.user_id != user.id:
+        return jsonify({"message": "forbidden"}), 403
+
+    item = CustomListItem.query.get(item_id)
+    if not item or item.list_id != list_id:
+        return jsonify({"message": "item not found"}), 404
+
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({"message": "item removed"})
 
 
 @api_bp.delete("/lists/<int:list_id>")

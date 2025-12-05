@@ -70,15 +70,33 @@
 
     <div class="actions">
       {% if current_user %}
+
+      <!-- Library Actions based on content type -->
+      {% if content.kind == 'film' or content.kind == 'movie' %}
       <form method="post" style="display: inline-block; margin-right: 6px">
         <input type="hidden" name="library_action" value="add" />
         <input type="hidden" name="status" value="watched" />
-        <button class="primary" type="submit">Kütüphaneme Ekle</button>
+        <button class="primary" type="submit">İzledim</button>
       </form>
       <form method="post" style="display: inline-block; margin-right: 6px">
-        <input type="hidden" name="library_action" value="remove" />
-        <button class="ghost" type="submit">Kütüphanemden Kaldır</button>
+        <input type="hidden" name="library_action" value="add" />
+        <input type="hidden" name="status" value="watchlist" />
+        <button class="ghost" type="submit">İzlenecekler Listesine Ekle</button>
       </form>
+      {% else %}
+      <form method="post" style="display: inline-block; margin-right: 6px">
+        <input type="hidden" name="library_action" value="add" />
+        <input type="hidden" name="status" value="read" />
+        <button class="primary" type="submit">Okudum</button>
+      </form>
+      <form method="post" style="display: inline-block; margin-right: 6px">
+        <input type="hidden" name="library_action" value="add" />
+        <input type="hidden" name="status" value="reading_list" />
+        <button class="ghost" type="submit">Okunacaklar Listesine Ekle</button>
+      </form>
+      {% endif %}
+
+      <!-- Add to custom list -->
       {% if user_lists and user_lists|length > 0 %}
       <form method="post" style="display: inline-block; margin-right: 6px">
         <select
@@ -89,7 +107,7 @@
           <option value="{{ lst.id }}">{{ lst.title }}</option>
           {% endfor %}
         </select>
-        <button class="ghost" type="submit">Listeye Ekle</button>
+        <button class="ghost" type="submit">Özel Listeye Ekle</button>
       </form>
       {% else %}
       <a

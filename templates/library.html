@@ -1,0 +1,150 @@
+{% extends "base.html" %} {% block content %}
+<section class="explore-hero">
+  <div>
+    <p class="eyebrow">Kütüphane</p>
+    <h1>{{ status_name }}</h1>
+    <div class="meta">
+      <span>
+        <a
+          href="{{ url_for('profile', username=user_info.username) }}"
+          style="
+            text-decoration: none;
+            color: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+          "
+        >
+          <img
+            src="{{ user_info.avatar or url_for('static', filename='default-avatar.svg') }}"
+            alt="{{ user_info.name }}"
+            style="
+              width: 32px;
+              height: 32px;
+              border-radius: 50%;
+              object-fit: cover;
+            "
+          />
+          <strong>{{ user_info.name }}</strong>
+        </a>
+      </span>
+      <span>{{ items_count }} içerik</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">İçerik</p>
+      <h2>Filmler ve Kitaplar</h2>
+    </div>
+  </div>
+
+  {% if items %}
+  <div
+    id="itemsGrid"
+    style="
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1.5rem;
+    "
+  >
+    {% for item in items %}
+    <div style="position: relative" data-item-id="{{ item.item_id }}">
+      <a
+        href="{{ url_for('content_detail', content_type=item.kind, content_id=item.id) }}"
+        style="text-decoration: none; color: inherit; display: block"
+      >
+        <article class="content-card">
+          <img
+            src="{{ item.poster or url_for('static', filename='placeholder-content.svg') }}"
+            alt="{{ item.title }}"
+          />
+          <div>
+            <h3 style="font-size: 0.95rem; margin: 0.5rem 0 0.25rem">
+              {{ item.title }}
+            </h3>
+            <p class="muted" style="font-size: 0.85rem; margin: 0">
+              {{ item.year }}
+            </p>
+          </div>
+        </article>
+      </a>
+      {% if current_user and user_info.username == current_user.username %}
+      <button
+        onclick="removeItem({{ item.item_id }}, event)"
+        style="
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+          background: rgba(255, 255, 255, 0.9);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          padding: 0.5rem;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          z-index: 10;
+        "
+        onmouseover="this.style.background='rgb(220,38,38)'"
+        onmouseout="this.style.background='rgba(255, 255, 255, 0.9)'"
+      >
+        🗑️
+      </button>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Bu kategoride henüz hiç içerik yok.</p>
+  {% endif %}
+</section>
+
+<script>
+  function removeItem(itemId, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!confirm('Bu içeriği kütüphanenizden kaldırmak istediğinizden emin misiniz?')) {
+      return;
+    }
+    fetch(`/api/library/${itemId}`, {
+      method: 'DELETE',
+      headers: {
+        {% if access_token %}'Authorization': 'Bearer {{ access_token }}'{% endif %}
+      }
+    }).then(async r => {
+      if (!r.ok) {
+        const text = await r.text();
+        throw new Error(`Hata ${r.status}: ${text}`);
+      }
+      return r.json();
+    }).then(() => {
+      // Remove the item from the DOM
+      const itemDiv = document.querySelector(`[data-item-id="${itemId}"]`);
+      if (itemDiv) {
+        itemDiv.remove();
+      }
+      // Show success message
+      const msg = document.createElement('div');
+      msg.className = 'alert success';
+      msg.textContent = 'İçerik kaldırıldı';
+      msg.style.position = 'fixed';
+      msg.style.top = '20px';
+      msg.style.right = '20px';
+      msg.style.zIndex = '9999';
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 3000);
+
+      // Check if no items left
+      const grid = document.getElementById('itemsGrid');
+      if (grid && grid.children.length === 0) {
+        grid.innerHTML = '<p class="muted">Bu kategoride henüz hiç içerik yok.</p>';
+      }
+    }).catch(err => {
+      alert('İçerik kaldırılamadı: ' + err.message);
+    });
+  }
+</script>
+{% endblock %}
