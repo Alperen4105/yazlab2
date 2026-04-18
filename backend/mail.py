@@ -64,3 +64,5 @@ def send_email(subject: str, to: str, body_text: str, body_html: str | None = No
         except Exception:
             pass
         return False
+# mail neeed to be fixed not sending, but url visible in terminal
+# mail neeed to be fixed not sending, but url visible in terminal

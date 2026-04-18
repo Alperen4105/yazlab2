@@ -7,7 +7,6 @@ activity_card %} {% block content %}
         <p1 class="eyebrow">Sosyal Akış</p1>
         <h1>Topluluğundaki en yeni aktiviteler</h1>
       </div>
-      <button class="ghost">Yeni Gönderi</button>
     </div>
     <div class="activity-list" id="activityList">
       {% for activity in activities %} {{ activity_card(activity) }} {% else %}
@@ -34,7 +33,7 @@ activity_card %} {% block content %}
         {% for item in featured_lists %}
         <li>
           <strong>{{ item.title }}</strong>
-          <span>{{ item.items }} içerik · {{ item.owner }}</span>
+          <span>{{ item.items_count }} içerik · {{ item.owner }}</span>
         </li>
         {% endfor %}
       </ul>
@@ -47,6 +46,7 @@ activity_card %} {% block content %}
           <a href="{{ url_for('profile', username=user.username) }}"
             >{{ user.name }}</a
           >
+          <span>{{ user.followers_count }} takipçi</span>
         </li>
         {% endfor %}
       </ul>

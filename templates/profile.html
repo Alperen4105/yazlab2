@@ -152,7 +152,14 @@ message in messages %}
     {% for activity in activities %}
     <article class="activity-card compact">
       <strong>{{ activity.user.name }}</strong>
-      <p>{{ activity.timestamp }} · {{ activity.content.title }}</p>
+      <p>
+        {% if activity.timestamp %} {% set ts = activity.timestamp %} {% set
+        date_part = ts.split('T')[0] %} {% set time_part =
+        ts.split('T')[1].split('.')[0] if 'T' in ts else '' %}
+        <span>{{ date_part }}</span> · <span>{{ time_part }}</span> · {{
+        activity.content.title }} {% else %} {{ activity.content.title }} {%
+        endif %}
+      </p>
     </article>
     {% endfor %}
   </div>

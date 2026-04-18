@@ -21,9 +21,13 @@
         activity.user.name }}, "{{ activity.list_name }}" listesine yeni bir
         içerik ekledi. {% else %}{{ activity.user.name }} bir içerikle
         etkileşimde bulundu. {% endif %}
-        <span class="timestamp"
-          >{{ activity.humanized_timestamp or activity.timestamp }}</span
-        >
+        <span class="timestamp">
+          {% if activity.humanized_timestamp %} {{ activity.humanized_timestamp
+          }} {% elif activity.timestamp %} {% set ts = activity.timestamp %} {%
+          set date_part = ts.split('T')[0] %} {% set time_part =
+          ts.split('T')[1].split('.')[0] if 'T' in ts else '' %} {{ date_part }}
+          · {{ time_part }} {% endif %}
+        </span>
       </p>
     </div>
   </header>
