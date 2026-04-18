@@ -51,6 +51,7 @@ coverage.xml
 
 # Virtual environments
 venv/
+.venv/
 env/
 ENV/
 env.bak/
@@ -67,9 +68,21 @@ venv.bak/
 # Environment variables
 .env
 .env.local
+.env.*
+!.env.example
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# Runtime / local app data
+instance/*.db
+instance/*.sqlite
+instance/*.sqlite3
+*.log
+
+# User uploads (generated content)
+static/uploads/**
+!static/uploads/.gitkeep
 
 # pyenv
 .python-version
